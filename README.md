@@ -1,5 +1,7 @@
 # Bimwright
 
+![Bimwright logo](docs/images/bimwright-logo.jpg)
+
 [![build](https://github.com/bimwright/bimwright/actions/workflows/build.yml/badge.svg)](https://github.com/bimwright/bimwright/actions/workflows/build.yml)
 [![license](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![.NET](https://img.shields.io/badge/.NET-4.8%20%7C%208%20%7C%2010-512BD4)](#supported-revit-versions)
