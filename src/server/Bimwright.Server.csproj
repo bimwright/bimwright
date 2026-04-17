@@ -8,6 +8,23 @@
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
 
+  <!-- NuGet .NET tool packaging (P4-001) -->
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>bimwright</ToolCommandName>
+    <PackageId>Bimwright.Server</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>Khoa Le</Authors>
+    <Description>MCP gateway for Autodesk Revit 2022-2027 — expose the Revit API as AI-callable tools with progressive disclosure (toolset gating), a Transaction-safe batch_execute, and a ToolBaker self-evolution engine. Pair with the Revit plugin distributed on GitHub Releases.</Description>
+    <PackageProjectUrl>https://github.com/bimwright/bimwright</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/bimwright/bimwright</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageTags>mcp;revit;bim;ai</PackageTags>
+    <Copyright>Copyright 2026 Khoa Le</Copyright>
+  </PropertyGroup>
+
   <!-- Shared config (A9) — pulled in as source so server binary has zero extra deps -->
   <ItemGroup>
     <Compile Include="..\shared\Config\BimwrightConfig.cs" Link="Shared\BimwrightConfig.cs" />
