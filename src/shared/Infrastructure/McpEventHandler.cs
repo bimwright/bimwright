@@ -146,6 +146,16 @@ namespace Bimwright.Rvt.Plugin
                         data = result.Data,
                         error = resultError
                     });
+
+                    var sizeWarning = ResponseSizeGuard.CheckResponse(
+                        commandName: request.CommandName,
+                        serializedPayload: response,
+                        topLevelKeyCount: (result.Data as Newtonsoft.Json.Linq.JObject)?.Count ?? 0);
+                    if (sizeWarning != null)
+                    {
+                        Console.Error.WriteLine(sizeWarning);
+                    }
+
                     request.Tcs.TrySetResult(response);
                 }
                 catch (Exception ex)
