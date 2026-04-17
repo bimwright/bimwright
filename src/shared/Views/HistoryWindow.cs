@@ -33,7 +33,7 @@ namespace Bimwright.Plugin.Views
         private McpCallEntry _selectedEntry;
 
         private static readonly System.Collections.Generic.HashSet<string> DirectCallTools =
-            new System.Collections.Generic.HashSet<string> { "query_kei_database", "read_kei_logs" };
+            new System.Collections.Generic.HashSet<string>();
 
         public HistoryWindow(McpSessionLog sessionLog, CommandDispatcher dispatcher,
                              McpEventHandler eventHandler, Autodesk.Revit.UI.ExternalEvent externalEvent)

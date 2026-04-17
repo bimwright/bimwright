@@ -11,7 +11,6 @@ namespace Bimwright.Plugin
 
     public static class RibbonSetup
     {
-        private const string KeiTabName = "KEI-ME";
         private const string TabName = "BIMwright";
         private const string PanelName = "BIMwright";
 
@@ -49,30 +48,11 @@ namespace Bimwright.Plugin
             };
         }
 
-        // Own BIMwright tab (lands at end via tab creation order) when KEI-ME is already
-        // registered at MCP load time; else fall back to the built-in Add-Ins tab.
         private static RibbonPanel ResolvePanel(UIControlledApplication application)
         {
-            if (KeiTabRegistered(application))
-            {
-                try { application.CreateRibbonTab(TabName); }
-                catch (Autodesk.Revit.Exceptions.ArgumentException) { }
-                return application.CreateRibbonPanel(TabName, PanelName);
-            }
-            return application.CreateRibbonPanel(PanelName);
-        }
-
-        private static bool KeiTabRegistered(UIControlledApplication application)
-        {
-            try
-            {
-                application.GetRibbonPanels(KeiTabName);
-                return true;
-            }
-            catch (Autodesk.Revit.Exceptions.InvalidOperationException)
-            {
-                return false;
-            }
+            try { application.CreateRibbonTab(TabName); }
+            catch (Autodesk.Revit.Exceptions.ArgumentException) { /* already created */ }
+            return application.CreateRibbonPanel(TabName, PanelName);
         }
     }
 }
