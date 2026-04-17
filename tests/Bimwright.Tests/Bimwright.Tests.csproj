@@ -15,10 +15,12 @@
   -->
   <ItemGroup>
     <Compile Include="..\..\src\shared\Security\ErrorSanitizer.cs" Link="Shared\ErrorSanitizer.cs" />
+    <Compile Include="..\..\src\shared\Infrastructure\SchemaValidator.cs" Link="Shared\SchemaValidator.cs" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.10.0" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="xunit" Version="2.9.0" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
