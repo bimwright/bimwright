@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using Newtonsoft.Json.Linq;
@@ -12,12 +11,9 @@ namespace Bimwright.Plugin.Handlers
     /// step. Inner handlers each open their own <see cref="Transaction"/>; TransactionGroup
     /// permits that (nested Transactions are forbidden, but inner-tx-inside-tx-group is fine).
     ///
-    /// Semantics:
-    /// - On any sub-command failure with <c>continueOnError=false</c> (default): stop, call
-    ///   <c>TransactionGroup.RollBack</c>, return collected results + <c>rolledBack=true</c>.
-    /// - On any failure with <c>continueOnError=true</c>: record per-command ok/error,
-    ///   continue the batch, call <c>Assimilate</c> at the end (surviving writes committed).
-    /// - On full success: <c>Assimilate</c> → single undo step.
+    /// Iteration + rollback-decision logic lives in <see cref="BatchExecutor"/> so it can
+    /// be unit-tested without a live document. This handler owns only the TransactionGroup
+    /// lifecycle + the final Assimilate/RollBack call based on the outcome.
     /// </summary>
     public class BatchExecuteHandler : IRevitCommand
     {
@@ -43,71 +39,23 @@ namespace Bimwright.Plugin.Handlers
                 return CommandResult.Fail("'commands' must be a non-empty array.");
 
             var continueOnError = request.Value<bool?>("continueOnError") ?? false;
-            var results = new List<object>();
-            var anyFailed = false;
 
             using (var tg = new TransactionGroup(doc, "MCP: batch_execute"))
             {
                 tg.Start();
 
-                for (var i = 0; i < commandsArr.Count; i++)
+                var outcome = BatchExecutor.Run(commandsArr, continueOnError, (cmdName, subParams) =>
                 {
-                    var cmd = commandsArr[i] as JObject;
-                    var cmdName = cmd?.Value<string>("command");
-
-                    if (string.IsNullOrEmpty(cmdName))
-                    {
-                        results.Add(new { index = i, ok = false, error = "Missing 'command' field." });
-                        anyFailed = true;
-                        if (!continueOnError) break;
-                        continue;
-                    }
-
                     var handler = _dispatcher.GetCommand(cmdName);
-                    if (handler == null)
-                    {
-                        results.Add(new { index = i, ok = false, error = $"Unknown command: {cmdName}" });
-                        anyFailed = true;
-                        if (!continueOnError) break;
-                        continue;
-                    }
-
-                    // Forbid recursion — a batch_execute inside a batch would double-wrap
-                    // the TransactionGroup and throw. Fail fast with a clear message.
-                    if (string.Equals(cmdName, "batch_execute", StringComparison.Ordinal))
-                    {
-                        results.Add(new { index = i, ok = false, error = "Nested batch_execute is not supported." });
-                        anyFailed = true;
-                        if (!continueOnError) break;
-                        continue;
-                    }
-
-                    var subParams = cmd["params"]?.ToString() ?? "{}";
-
-                    try
-                    {
-                        var r = handler.Execute(app, subParams);
-                        if (r.Success)
-                        {
-                            results.Add(new { index = i, ok = true, data = r.Data });
-                        }
-                        else
-                        {
-                            results.Add(new { index = i, ok = false, error = r.Error });
-                            anyFailed = true;
-                            if (!continueOnError) break;
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        results.Add(new { index = i, ok = false, error = ex.Message });
-                        anyFailed = true;
-                        if (!continueOnError) break;
-                    }
-                }
+                    if (handler == null) return BatchExecutor.InvokeResult.Unknown();
+                    var r = handler.Execute(app, subParams);
+                    return r.Success
+                        ? BatchExecutor.InvokeResult.Ok(r.Data)
+                        : BatchExecutor.InvokeResult.Fail(r.Error);
+                });
 
                 bool rolledBack;
-                if (anyFailed && !continueOnError)
+                if (outcome.AnyFailed && !continueOnError)
                 {
                     tg.RollBack();
                     rolledBack = true;
@@ -118,7 +66,7 @@ namespace Bimwright.Plugin.Handlers
                     rolledBack = false;
                 }
 
-                return CommandResult.Ok(new { results, rolledBack });
+                return CommandResult.Ok(new { results = outcome.Results, rolledBack });
             }
         }
     }

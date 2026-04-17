@@ -19,6 +19,7 @@
     <Compile Include="..\..\src\shared\Config\BimwrightConfig.cs" Link="Shared\BimwrightConfig.cs" />
     <Compile Include="..\..\src\server\ToolsetFilter.cs" Link="Server\ToolsetFilter.cs" />
     <Compile Include="..\..\src\server\ToolsetAttribute.cs" Link="Server\ToolsetAttribute.cs" />
+    <Compile Include="..\..\src\shared\Handlers\BatchExecutor.cs" Link="Shared\BatchExecutor.cs" />
   </ItemGroup>
 
   <ItemGroup>
