@@ -10,14 +10,32 @@
   <a href="#supported-revit-versions"><img src="https://img.shields.io/badge/.NET-4.8%20%7C%208%20%7C%2010-512BD4" alt=".NET" /></a>
 </p>
 
-**MCP gateway for Autodesk Revit 2022–2027.** Exposes the Revit API as AI-callable tools over stdio, so any MCP-compatible client (Claude Code, Cursor, Cline, etc.) can drive Revit directly.
+**Bimwright — the predictable Revit MCP server.**
 
-Built-in differentiators:
+Pure C#. Apache-2.0. **28 tools across Revit 2022–2027**, transaction-safe and auditable. Extensible via ToolBaker when you need more.
 
-- **Progressive disclosure.** `--toolsets query,create,view` gates which tool groups the model sees. Weak models stay sharp by hiding write-capable tools until needed.
-- **Transaction-safe batching.** `batch_execute` wraps a whole list of commands in one Revit `TransactionGroup`, collapsing many undo steps into one and auto-rolling back on failure.
-- **ToolBaker self-evolution.** Let the model write, compile, and register new Revit tools at runtime (Debug builds only). Bake once, reuse forever.
-- **Read-only by default.** `--read-only` hides every create/modify/delete tool so agents stay advisory until you flip them on.
+Built for AI agents and BIM workflows that want **reversible, reviewable edits** — not black-box autopilot.
+
+Key traits:
+
+- **Full R22–R27 span.** One codebase, six plugin shells, .NET 4.8 → .NET 10. Most peers skip at least one year.
+- **Pure C# + Apache-2.0.** No Node.js runtime beside Revit. Enterprise-safe license + audit-ready dependency graph.
+- **Transaction-safe batching.** `batch_execute` wraps a command list in one Revit `TransactionGroup` — one undo, atomic rollback on failure.
+- **Progressive disclosure.** `--toolsets` + `--read-only` gate what the model sees. Weak models stay sharp.
+- **ToolBaker self-extension.** The model writes, compiles, and registers new Revit tools at runtime (Debug).
+
+### How Bimwright compares
+
+| | **Bimwright** | Leader¹ | LuDattilo | Weber | Autodesk R27 |
+|---|---|---|---|---|---|
+| Tools | **28 + ToolBaker** | 25 | ~80–100 | claims 705+ | 6 |
+| Revit span | **R22–R27** | R20–R26 | R23–R27 | unverified | R27 only |
+| Stack | Pure C# | TS + C# | TS + C# | — | C# |
+| License | **Apache-2.0** | MIT | — | — | proprietary |
+| Distribution | NuGet + MCP Registry + ZIPs | npm + ZIPs | npm + ZIPs | GitHub only | Autodesk site |
+
+_Snapshot 2026-04-18. `—` = not verified live. Refresh with `gh search repos "revit mcp"`._
+_¹ `mcp-servers-for-revit/mcp-servers-for-revit` — current community leader by stars._
 
 ---
 
@@ -73,6 +91,21 @@ Drop the `--target` flag and Bimwright auto-detects the running Revit instance v
 
 ---
 
+## Supported MCP clients
+
+| Client | Status | Notes |
+|--------|--------|-------|
+| Claude Code CLI | ✅ verified | primary test target |
+| Claude Desktop | ✅ verified | `.mcp.json` entry |
+| Cursor | ⏳ pending verification | stdio; expected to work |
+| Cline (VS Code) | ⏳ pending verification | stdio; expected to work |
+| Other MCP clients | ⏳ pending | open an issue if you try one |
+
+Broader client-compat matrix is on the v0.2 roadmap.
+
+---
+
+<!-- TODO v0.2: add demo.gif above this section -->
 ## Quickstart — 5 minutes to first tool call
 
 1. `dotnet tool install -g Bimwright.Rvt.Server` + `pwsh install.ps1`.
@@ -96,6 +129,8 @@ Drop the `--target` flag and Bimwright auto-detects the running Revit instance v
 ---
 
 ## Toolsets
+
+**28 tools across 10 groups.** Four groups are on by default (`query`, `create`, `view`, `meta`); the rest opt in via `--toolsets` or config.
 
 | Toolset | Tools | Default |
 |---------|-------|---------|
