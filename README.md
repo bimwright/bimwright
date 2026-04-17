@@ -1,3 +1,5 @@
+<!-- mcp-name: io.github.bimwright/rvt-mcp -->
+
 <p align="center">
   <img src="docs/images/bimwright-logo.jpg" alt="Bimwright — forging the digital craft of the built environment" width="420" />
 </p>

@@ -39,3 +39,6 @@ Desktop.ini
 
 # Research archives (local reference only, not repo artifact)
 docs/research-archive/
+
+# MCP Registry publisher CLI (downloaded on demand)
+.mcp-publisher/
