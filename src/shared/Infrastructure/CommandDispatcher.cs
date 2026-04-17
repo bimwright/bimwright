@@ -42,6 +42,8 @@ namespace Bimwright.Plugin
             Register(new Handlers.AnalyzeSheetLayoutHandler());
             // MCP Prompts support
             Register(new Handlers.GetModelOverviewHandler());
+            // A6 batch execution — needs dispatcher ref to look up sub-commands
+            Register(new Handlers.BatchExecuteHandler(this));
             // ToolBaker (Debug only — gated by #if in handlers)
             Register(new Handlers.BakeToolHandler());
             Register(new Handlers.ListBakedToolsHandler());
