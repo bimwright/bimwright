@@ -701,6 +701,25 @@ namespace Bimwright.Server
             catch (Exception ex) { return $"Error: {ex.Message}"; }
         }
 
+        [McpServerTool(Name = "batch_execute"), System.ComponentModel.Description(
+            "Run multiple MCP commands in one request, all inside a single Revit TransactionGroup " +
+            "(one undo step on success). Input: commands — a JSON array string like " +
+            "'[{\"command\":\"create_level\",\"params\":{\"elevation\":3000}}, " +
+            "{\"command\":\"create_grid\",\"params\":{\"startX\":0,\"startY\":0,\"endX\":5000,\"endY\":0}}]'. " +
+            "On any failure, the whole group rolls back (nothing committed) unless continueOnError=true, " +
+            "in which case surviving commands are kept and per-command results report ok/error. " +
+            "Returns: {results: [{index, ok, data|error}], rolledBack}.")]
+        public static async Task<string> BatchExecute(string commands, bool continueOnError = false)
+        {
+            try
+            {
+                var parsed = JArray.Parse(commands);
+                var result = await ToolGateway.SendToRevit("batch_execute", new { commands = parsed, continueOnError });
+                return JsonConvert.SerializeObject(result, Formatting.Indented);
+            }
+            catch (Exception ex) { return $"Error: {ex.Message}"; }
+        }
+
         [McpServerTool(Name = "analyze_usage_patterns"), System.ComponentModel.Description(
             "Analyze MCP tool usage patterns. Returns: session stats (call counts, success rates, top tools, flags), " +
             "and optionally historical data from journal files. Parameters: " +
