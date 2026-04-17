@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Autodesk.Revit.UI;
@@ -50,7 +49,7 @@ namespace Bimwright.Plugin
                     if (command == null)
                     {
                         sw.Stop();
-                        var unknownError = SanitizeError($"Unknown command: {request.CommandName}");
+                        var unknownError = ErrorSanitizer.Sanitize($"Unknown command: {request.CommandName}");
                         McpLogger.Log(request.CommandName, request.ParamsJson, false,
                                       sw.ElapsedMilliseconds, unknownError);
                         _sessionLog?.Add(new McpCallEntry
@@ -92,7 +91,7 @@ namespace Bimwright.Plugin
                         ? resultJson.Substring(0, 10240)
                         : resultJson;
 
-                    var resultError = SanitizeError(result.Error);
+                    var resultError = ErrorSanitizer.Sanitize(result.Error);
                     McpLogger.Log(request.CommandName, request.ParamsJson, result.Success,
                                   sw.ElapsedMilliseconds, resultError, codeSnippet, resultJson);
 
@@ -122,7 +121,7 @@ namespace Bimwright.Plugin
                 catch (Exception ex)
                 {
                     sw.Stop();
-                    var exError = SanitizeError(ex.Message);
+                    var exError = ErrorSanitizer.Sanitize(ex.Message);
                     McpLogger.Log(request.CommandName, request.ParamsJson, false,
                                   sw.ElapsedMilliseconds, exError);
                     _sessionLog?.Add(new McpCallEntry
@@ -144,32 +143,6 @@ namespace Bimwright.Plugin
                     request.Tcs.TrySetResult(errorResponse);
                 }
             }
-        }
-
-        /// <summary>
-        /// S5 path-leak mask: strip absolute paths from error messages before they reach
-        /// the MCP response, JSONL log, or session-log UI. Keeps filename + line number.
-        /// </summary>
-        private static string SanitizeError(string error)
-        {
-            if (string.IsNullOrEmpty(error)) return error;
-
-            // 1. Windows absolute paths: D:\..., C:\Users\... → keep last filename only
-            error = Regex.Replace(error,
-                @"[A-Za-z]:\\(?:[^\\""'\s]+\\)*([^\\""'\s]+)",
-                "$1");
-
-            // 2. UNC paths: \\server\share\... → keep last filename only
-            error = Regex.Replace(error,
-                @"\\\\[^\\""'\s]+\\(?:[^\\""'\s]+\\)*([^\\""'\s]+)",
-                "$1");
-
-            // 3. Unix paths (safety): /home/..., /Users/... → keep last filename only
-            error = Regex.Replace(error,
-                @"/(?:home|Users)/[^/\s""']+/(?:[^/\s""']+/)*([^/\s""']+)",
-                "$1");
-
-            return error;
         }
 
         public string GetName() => "Bimwright.McpEventHandler";
