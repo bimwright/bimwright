@@ -35,6 +35,12 @@
     <Compile Include="..\shared\Config\BimwrightConfig.cs" Link="Shared\BimwrightConfig.cs" />
   </ItemGroup>
 
+  <!-- Expose internal helpers (ParseCsv, ApplyCliArgs, ApplyEnvVars, Load overloads, etc.)
+       to the test project. Required for BimwrightConfigTests + ToolsListSnapshotTests. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Bimwright.Rvt.Tests" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="ModelContextProtocol" Version="1.1.0" />
     <PackageReference Include="ModelContextProtocol.AspNetCore" Version="1.1.0" />
