@@ -27,16 +27,40 @@ namespace Bimwright.Plugin
         {
             _onRequest = onRequest ?? throw new ArgumentNullException(nameof(onRequest));
 
-            _listener = new TcpListener(IPAddress.Loopback, 0);
+            // S7 fail-closed default: bind loopback only unless BIMWRIGHT_ALLOW_LAN_BIND is
+            // explicitly opted in. Token auth stays active in either mode (see AuthToken).
+            bool allowLan = IsLanBindAllowed();
+            var bindAddress = allowLan ? IPAddress.Any : IPAddress.Loopback;
+
+            _listener = new TcpListener(bindAddress, 0);
             _listener.Start();
             _port = ((IPEndPoint)_listener.LocalEndpoint).Port;
 
             AuthToken.GenerateAndPersist(_port);
-            Log($"Listening on port {_port} (auth: enabled)");
+            if (allowLan)
+            {
+                const string warn = "[Bimwright] \u26A0 LAN bind enabled. Token auth active but network exposed.";
+                try { Console.Error.WriteLine(warn); } catch { }
+                Log($"Listening on 0.0.0.0:{_port} (LAN bind, auth: enabled)");
+            }
+            else
+            {
+                Log($"Listening on 127.0.0.1:{_port} (auth: enabled)");
+            }
 
             _running = true;
             _listenThread = new Thread(ListenLoop) { IsBackground = true, Name = "Bimwright.TcpTransportServer" };
             _listenThread.Start();
+        }
+
+        internal static bool IsLanBindAllowed()
+        {
+            var value = Environment.GetEnvironmentVariable("BIMWRIGHT_ALLOW_LAN_BIND");
+            if (string.IsNullOrWhiteSpace(value)) return false;
+            value = value.Trim();
+            return value == "1"
+                || string.Equals(value, "true", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(value, "yes", StringComparison.OrdinalIgnoreCase);
         }
 
         public void Stop()
