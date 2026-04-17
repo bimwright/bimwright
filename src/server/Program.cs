@@ -11,6 +11,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Bimwright.Plugin; // BimwrightConfig
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -26,23 +27,25 @@ namespace Bimwright.Server
     {
         static async Task Main(string[] args)
         {
-            // Parse --target R22|R23|R24|R25|R26|R27 for multi-Revit support
-            int targetIndex = Array.IndexOf(args, "--target");
-            if (targetIndex >= 0 && targetIndex + 1 < args.Length)
+            // A9 3-layer config precedence (JSON < env < CLI). AuthToken.Target + transport
+            // mode (--http) stay as separate CLI parses for now; A3 toolsets gating uses
+            // BimwrightConfig.
+            var config = BimwrightConfig.Load(args);
+            if (!string.IsNullOrWhiteSpace(config.Target))
             {
-                var target = args[targetIndex + 1].ToUpperInvariant();
+                var target = config.Target.ToUpperInvariant();
                 if (Array.IndexOf(AuthToken.AllVersions, target) < 0)
                 {
-                    Console.Error.WriteLine("[Bimwright] Invalid --target argument. Expected: --target R22|R23|R24|R25|R26|R27");
+                    Console.Error.WriteLine("[Bimwright] Invalid target. Expected: R22|R23|R24|R25|R26|R27");
                     Environment.Exit(1);
                     return;
                 }
                 AuthToken.Target = target;
             }
 
-            // Initialize memory system
+            // Initialize memory system (shared across tool classes + resources)
             var session = new Memory.SessionContext();
-            RevitTools.Session = session;
+            ToolGateway.Session = session;
             RevitResources.Session = session;
 
             int httpIndex = Array.IndexOf(args, "--http");
@@ -55,34 +58,36 @@ namespace Bimwright.Server
                     Environment.Exit(1);
                     return;
                 }
-                await RunHttpSse(port);
+                await RunHttpSse(config, port);
             }
             else
             {
-                await RunStdio();
+                await RunStdio(config);
             }
         }
 
-        private static async Task RunStdio()
+        private static async Task RunStdio(BimwrightConfig config)
         {
+            var enabled = ToolsetFilter.Resolve(config);
             var builder = Host.CreateApplicationBuilder();
-            builder.Services
+            var mcp = builder.Services
                 .AddMcpServer()
-                .WithStdioServerTransport()
-                .WithTools<RevitTools>()
-                .WithResources<RevitResources>();
+                .WithStdioServerTransport();
+            mcp = RegisterToolsets(mcp, enabled);
+            mcp.WithResources<RevitResources>();
             var app = builder.Build();
             await app.RunAsync();
         }
 
-        private static async Task RunHttpSse(int port)
+        private static async Task RunHttpSse(BimwrightConfig config, int port)
         {
+            var enabled = ToolsetFilter.Resolve(config);
             var builder = WebApplication.CreateBuilder();
-            builder.Services
+            var mcp = builder.Services
                 .AddMcpServer()
-                .WithHttpTransport()
-                .WithTools<RevitTools>()
-                .WithResources<RevitResources>();
+                .WithHttpTransport();
+            mcp = RegisterToolsets(mcp, enabled);
+            mcp.WithResources<RevitResources>();
 
             builder.WebHost.UseUrls($"http://127.0.0.1:{port}");
 
@@ -104,14 +109,88 @@ namespace Bimwright.Server
             app.MapMcp();
 
             Console.Error.WriteLine($"[Bimwright] SSE server listening on http://127.0.0.1:{port}");
+            Console.Error.WriteLine($"[Bimwright] Toolsets enabled: {string.Join(",", enabled.OrderBy(n => n))}");
             await app.RunAsync();
+        }
+
+        private static IMcpServerBuilder RegisterToolsets(IMcpServerBuilder mcp, HashSet<string> enabled)
+        {
+            if (enabled.Contains("query"))      mcp = mcp.WithTools<QueryTools>();
+            if (enabled.Contains("create"))     mcp = mcp.WithTools<CreateTools>();
+            if (enabled.Contains("modify"))     mcp = mcp.WithTools<ModifyTools>();
+            if (enabled.Contains("delete"))     mcp = mcp.WithTools<DeleteTools>();
+            if (enabled.Contains("view"))       mcp = mcp.WithTools<ViewTools>();
+            if (enabled.Contains("export"))     mcp = mcp.WithTools<ExportTools>();
+            if (enabled.Contains("annotation")) mcp = mcp.WithTools<AnnotationTools>();
+            if (enabled.Contains("mep"))        mcp = mcp.WithTools<MepTools>();
+            if (enabled.Contains("toolbaker"))  mcp = mcp.WithTools<ToolbakerTools>();
+            if (enabled.Contains("meta"))       mcp = mcp.WithTools<MetaTools>();
+            return mcp;
         }
     }
 
-    [McpServerToolType]
-    public class RevitTools
+    /// <summary>
+    /// A3 toolset resolver (aspect #3 §A3). Resolves <c>config.Toolsets</c> to a concrete
+    /// set of enabled toolset names, applying defaults + the <c>"all"</c> shortcut.
+    /// Read-only exclusion (P3-003) will layer on top of this.
+    /// </summary>
+    public static class ToolsetFilter
     {
-        internal static Memory.SessionContext Session { get; set; }
+        public static readonly string[] KnownToolsets =
+        {
+            "query", "create", "modify", "delete", "view",
+            "export", "annotation", "mep", "toolbaker", "meta"
+        };
+
+        public static readonly string[] DefaultOn =
+        {
+            "query", "create", "view", "meta"
+        };
+
+        public static HashSet<string> Resolve(BimwrightConfig config)
+        {
+            var requested = config?.Toolsets;
+            HashSet<string> set;
+
+            if (requested == null || requested.Count == 0)
+            {
+                set = new HashSet<string>(DefaultOn, StringComparer.OrdinalIgnoreCase);
+            }
+            else if (requested.Any(t => string.Equals(t, "all", StringComparison.OrdinalIgnoreCase)))
+            {
+                set = new HashSet<string>(KnownToolsets, StringComparer.OrdinalIgnoreCase);
+            }
+            else
+            {
+                set = new HashSet<string>(requested, StringComparer.OrdinalIgnoreCase);
+            }
+
+            // Drop unknown tokens silently (misspelling shouldn't crash the server)
+            set.IntersectWith(KnownToolsets);
+            return set;
+        }
+    }
+
+    /// <summary>
+    /// Documentation marker for which toolset a tool class belongs to. The active gate
+    /// is <see cref="Program"/>.<c>RegisterToolsets</c>; this attribute exists so tests
+    /// and future tooling can assert class → toolset mapping via reflection.
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Class, Inherited = false, AllowMultiple = false)]
+    public sealed class ToolsetAttribute : Attribute
+    {
+        public string Name { get; }
+        public ToolsetAttribute(string name) { Name = name; }
+    }
+
+    /// <summary>
+    /// Shared plugin-connection plumbing used by every toolset class. Owns the socket/
+    /// pipe lifecycle, response read loop, pending-request correlation, and session
+    /// call recording. Toolset classes contain only the MCP tool-method shells.
+    /// </summary>
+    internal static class ToolGateway
+    {
+        public static Memory.SessionContext Session { get; set; }
 
         private static TcpClient _client;
         private static NamedPipeClientStream _pipeStream;
@@ -187,7 +266,6 @@ namespace Bimwright.Server
                 _writer = new StreamWriter(stream, new UTF8Encoding(false)) { AutoFlush = true };
                 _connected = true;
 
-                // Start reading responses on background thread
                 var readThread = new Thread(ReadLoop) { IsBackground = true, Name = "Bimwright.ResponseReader" };
                 readThread.Start();
             }
@@ -222,11 +300,7 @@ namespace Bimwright.Server
             }
         }
 
-        /// <summary>Public accessor for SendToRevit — used by RevitPrompts.</summary>
-        public static Task<JObject> SendToRevitPublic(string command, object parameters = null)
-            => SendToRevit(command, parameters);
-
-        private static async Task<JObject> SendToRevit(string command, object parameters = null)
+        public static async Task<JObject> SendToRevit(string command, object parameters = null)
         {
             EnsureConnected();
 
@@ -270,38 +344,27 @@ namespace Bimwright.Server
                 throw new InvalidOperationException(error);
             }
         }
+    }
 
-        [McpServerTool(Name = "show_message"), System.ComponentModel.Description("Display a TaskDialog inside Revit with an optional custom message. Use for connection testing, user notifications, or feedback during automation flows. Both 'message' and 'title' are optional — omit for default greeting.")]
-        public static async Task<string> ShowMessage(string message = null, string title = null)
-        {
-            try
-            {
-                object parameters = null;
-                if (!string.IsNullOrWhiteSpace(message) || !string.IsNullOrWhiteSpace(title))
-                {
-                    parameters = new { message, title };
-                }
-                var result = await SendToRevit("show_message", parameters);
-                return JsonConvert.SerializeObject(result);
-            }
-            catch (Exception ex)
-            {
-                return $"Error: {ex.Message}";
-            }
-        }
+    // =====================================================================
+    // Toolset classes — one per aspect #3 §A3 group. Registration happens in
+    // Program.RegisterToolsets() driven by config.Toolsets. Each method wraps
+    // ToolGateway.SendToRevit with a catch-all that surfaces the error to the
+    // MCP client as plain text instead of throwing.
+    // =====================================================================
 
+    [McpServerToolType, Toolset("query")]
+    public class QueryTools
+    {
         [McpServerTool(Name = "get_current_view_info"), System.ComponentModel.Description("Get current active view info. Returns: viewName, viewType (FloorPlan/Section/3D/Sheet), level, scale, detailLevel, displayStyle. Use before creating elements to know which level/view is active.")]
         public static async Task<string> GetCurrentViewInfo()
         {
             try
             {
-                var result = await SendToRevit("get_current_view_info");
+                var result = await ToolGateway.SendToRevit("get_current_view_info");
                 return JsonConvert.SerializeObject(result, Formatting.Indented);
             }
-            catch (Exception ex)
-            {
-                return $"Error: {ex.Message}";
-            }
+            catch (Exception ex) { return $"Error: {ex.Message}"; }
         }
 
         [McpServerTool(Name = "get_selected_elements"), System.ComponentModel.Description("Get currently selected elements in Revit. Returns array of {id, name, category, typeName}. Use to inspect what user has selected before operating on elements (color, delete, move).")]
@@ -309,13 +372,10 @@ namespace Bimwright.Server
         {
             try
             {
-                var result = await SendToRevit("get_selected_elements");
+                var result = await ToolGateway.SendToRevit("get_selected_elements");
                 return JsonConvert.SerializeObject(result, Formatting.Indented);
             }
-            catch (Exception ex)
-            {
-                return $"Error: {ex.Message}";
-            }
+            catch (Exception ex) { return $"Error: {ex.Message}"; }
         }
 
         [McpServerTool(Name = "get_available_family_types"), System.ComponentModel.Description("Get available family types in current project. Returns {familyName, typeName, typeId} grouped by category. Optional: filter by category name (e.g. 'Walls', 'Doors', 'Pipes'). Use typeId from results when calling create_point_based_element.")]
@@ -323,13 +383,10 @@ namespace Bimwright.Server
         {
             try
             {
-                var result = await SendToRevit("get_available_family_types", new { category });
+                var result = await ToolGateway.SendToRevit("get_available_family_types", new { category });
                 return JsonConvert.SerializeObject(result, Formatting.Indented);
             }
-            catch (Exception ex)
-            {
-                return $"Error: {ex.Message}";
-            }
+            catch (Exception ex) { return $"Error: {ex.Message}"; }
         }
 
         [McpServerTool(Name = "ai_element_filter"), System.ComponentModel.Description("Filter elements by category and parameter. Numeric values in mm (auto-converted). Operators: equals/contains/startswith/greaterthan/lessthan. Set select=true to auto-select results in Revit. Example: category='Pipes', parameterName='Diameter', parameterValue='200', operator='greaterthan', select=true")]
@@ -337,13 +394,10 @@ namespace Bimwright.Server
         {
             try
             {
-                var result = await SendToRevit("ai_element_filter", new { category, parameterName, parameterValue, @operator, limit, select });
+                var result = await ToolGateway.SendToRevit("ai_element_filter", new { category, parameterName, parameterValue, @operator, limit, select });
                 return JsonConvert.SerializeObject(result, Formatting.Indented);
             }
-            catch (Exception ex)
-            {
-                return $"Error: {ex.Message}";
-            }
+            catch (Exception ex) { return $"Error: {ex.Message}"; }
         }
 
         [McpServerTool(Name = "analyze_model_statistics"), System.ComponentModel.Description("Analyze model: element counts grouped by category (Walls, Doors, Pipes, etc.). Use to understand project scope before detailed queries.")]
@@ -351,13 +405,10 @@ namespace Bimwright.Server
         {
             try
             {
-                var result = await SendToRevit("analyze_model_statistics");
+                var result = await ToolGateway.SendToRevit("analyze_model_statistics");
                 return JsonConvert.SerializeObject(result, Formatting.Indented);
             }
-            catch (Exception ex)
-            {
-                return $"Error: {ex.Message}";
-            }
+            catch (Exception ex) { return $"Error: {ex.Message}"; }
         }
 
         [McpServerTool(Name = "get_material_quantities"), System.ComponentModel.Description("Calculate material quantities (area m², volume m³) from elements by category. Required: category (e.g. 'Walls', 'Floors').")]
@@ -365,23 +416,22 @@ namespace Bimwright.Server
         {
             try
             {
-                var result = await SendToRevit("get_material_quantities", new { category });
+                var result = await ToolGateway.SendToRevit("get_material_quantities", new { category });
                 return JsonConvert.SerializeObject(result, Formatting.Indented);
             }
-            catch (Exception ex)
-            {
-                return $"Error: {ex.Message}";
-            }
+            catch (Exception ex) { return $"Error: {ex.Message}"; }
         }
+    }
 
-        // --- Phase 3: Create Elements ---
-
+    [McpServerToolType, Toolset("create")]
+    public class CreateTools
+    {
         [McpServerTool(Name = "create_line_based_element"), System.ComponentModel.Description("Create line-based elements (wall). Params: elementType, startX/Y, endX/Y (mm), level (name), typeId (optional), height (mm, default 3000).")]
         public static async Task<string> CreateLineBasedElement(string elementType, double startX, double startY, double endX, double endY, string level = "", long? typeId = null, double height = 3000)
         {
             try
             {
-                var result = await SendToRevit("create_line_based_element", new { elementType, startX, startY, endX, endY, level, typeId, height });
+                var result = await ToolGateway.SendToRevit("create_line_based_element", new { elementType, startX, startY, endX, endY, level, typeId, height });
                 return JsonConvert.SerializeObject(result, Formatting.Indented);
             }
             catch (Exception ex) { return $"Error: {ex.Message}"; }
@@ -392,7 +442,7 @@ namespace Bimwright.Server
         {
             try
             {
-                var result = await SendToRevit("create_point_based_element", new { typeId, x, y, z, level });
+                var result = await ToolGateway.SendToRevit("create_point_based_element", new { typeId, x, y, z, level });
                 return JsonConvert.SerializeObject(result, Formatting.Indented);
             }
             catch (Exception ex) { return $"Error: {ex.Message}"; }
@@ -404,7 +454,7 @@ namespace Bimwright.Server
             try
             {
                 var parsedPoints = JArray.Parse(points);
-                var result = await SendToRevit("create_surface_based_element", new { elementType, points = parsedPoints, level, typeId });
+                var result = await ToolGateway.SendToRevit("create_surface_based_element", new { elementType, points = parsedPoints, level, typeId });
                 return JsonConvert.SerializeObject(result, Formatting.Indented);
             }
             catch (Exception ex) { return $"Error: {ex.Message}"; }
@@ -415,7 +465,7 @@ namespace Bimwright.Server
         {
             try
             {
-                var result = await SendToRevit("create_level", new { elevation, name });
+                var result = await ToolGateway.SendToRevit("create_level", new { elevation, name });
                 return JsonConvert.SerializeObject(result, Formatting.Indented);
             }
             catch (Exception ex) { return $"Error: {ex.Message}"; }
@@ -426,7 +476,7 @@ namespace Bimwright.Server
         {
             try
             {
-                var result = await SendToRevit("create_grid", new { startX, startY, endX, endY, name });
+                var result = await ToolGateway.SendToRevit("create_grid", new { startX, startY, endX, endY, name });
                 return JsonConvert.SerializeObject(result, Formatting.Indented);
             }
             catch (Exception ex) { return $"Error: {ex.Message}"; }
@@ -437,21 +487,23 @@ namespace Bimwright.Server
         {
             try
             {
-                var result = await SendToRevit("create_room", new { x, y, level, name, number });
+                var result = await ToolGateway.SendToRevit("create_room", new { x, y, level, name, number });
                 return JsonConvert.SerializeObject(result, Formatting.Indented);
             }
             catch (Exception ex) { return $"Error: {ex.Message}"; }
         }
+    }
 
-        // --- Phase 4: Modify & Delete ---
-
+    [McpServerToolType, Toolset("modify")]
+    public class ModifyTools
+    {
         [McpServerTool(Name = "operate_element"), System.ComponentModel.Description("Operate on elements in current view. operation: select (highlight in UI), hide, unhide, isolate (hide everything else), setcolor (override graphics with RGB). elementIds: JSON int array e.g. '[12345, 67890]'. For setcolor: r/g/b 0-255 (default red 255,0,0).")]
         public static async Task<string> OperateElement(string operation, string elementIds, byte r = 255, byte g = 0, byte b = 0)
         {
             try
             {
                 var parsedIds = JArray.Parse(elementIds).ToObject<long[]>();
-                var result = await SendToRevit("operate_element", new { operation, elementIds = parsedIds, r, g, b });
+                var result = await ToolGateway.SendToRevit("operate_element", new { operation, elementIds = parsedIds, r, g, b });
                 return JsonConvert.SerializeObject(result, Formatting.Indented);
             }
             catch (Exception ex) { return $"Error: {ex.Message}"; }
@@ -462,43 +514,90 @@ namespace Bimwright.Server
         {
             try
             {
-                var result = await SendToRevit("color_elements", new { category, parameterName });
+                var result = await ToolGateway.SendToRevit("color_elements", new { category, parameterName });
                 return JsonConvert.SerializeObject(result, Formatting.Indented);
             }
             catch (Exception ex) { return $"Error: {ex.Message}"; }
         }
+    }
 
+    [McpServerToolType, Toolset("delete")]
+    public class DeleteTools
+    {
         [McpServerTool(Name = "delete_element"), System.ComponentModel.Description("Delete elements by ID. DESTRUCTIVE — cannot be undone via MCP. elementIds: JSON int array e.g. '[12345]'. Get IDs from get_selected_elements or ai_element_filter first.")]
         public static async Task<string> DeleteElement(string elementIds)
         {
             try
             {
                 var parsedIds = JArray.Parse(elementIds).ToObject<long[]>();
-                var result = await SendToRevit("delete_element", new { elementIds = parsedIds });
+                var result = await ToolGateway.SendToRevit("delete_element", new { elementIds = parsedIds });
+                return JsonConvert.SerializeObject(result, Formatting.Indented);
+            }
+            catch (Exception ex) { return $"Error: {ex.Message}"; }
+        }
+    }
+
+    [McpServerToolType, Toolset("view")]
+    public class ViewTools
+    {
+        [McpServerTool(Name = "create_view"), System.ComponentModel.Description("Create a view. Params: viewType (floorplan, 3d), level (name, for floorplan), name (optional).")]
+        public static async Task<string> CreateView(string viewType, string level = "", string name = "")
+        {
+            try
+            {
+                var result = await ToolGateway.SendToRevit("create_view", new { viewType, level, name });
                 return JsonConvert.SerializeObject(result, Formatting.Indented);
             }
             catch (Exception ex) { return $"Error: {ex.Message}"; }
         }
 
-        // --- Phase 5: Export & Tags ---
+        [McpServerTool(Name = "place_view_on_sheet"), System.ComponentModel.Description("Place a view on a sheet. Creates new sheet if sheetId not provided. Params: viewId (required), sheetId (optional), sheetNumber (optional), sheetName (optional).")]
+        public static async Task<string> PlaceViewOnSheet(long viewId, long? sheetId = null, string sheetNumber = "", string sheetName = "MCP Generated Sheet")
+        {
+            try
+            {
+                var result = await ToolGateway.SendToRevit("place_view_on_sheet", new { viewId, sheetId, sheetNumber, sheetName });
+                return JsonConvert.SerializeObject(result, Formatting.Indented);
+            }
+            catch (Exception ex) { return $"Error: {ex.Message}"; }
+        }
 
+        [McpServerTool(Name = "analyze_sheet_layout"), System.ComponentModel.Description("Analyze a sheet's title block dimensions and viewport positions/scales in mm. Provide sheetNumber (e.g. 'ISO-005') or sheetId. If neither, uses active view when it is a sheet. Returns title block size, viewport centers, widths, heights, and scales.")]
+        public static async Task<string> AnalyzeSheetLayout(string sheetNumber = "", long? sheetId = null)
+        {
+            try
+            {
+                var result = await ToolGateway.SendToRevit("analyze_sheet_layout", new { sheetNumber, sheetId });
+                return JsonConvert.SerializeObject(result, Formatting.Indented);
+            }
+            catch (Exception ex) { return $"Error: {ex.Message}"; }
+        }
+    }
+
+    [McpServerToolType, Toolset("export")]
+    public class ExportTools
+    {
         [McpServerTool(Name = "export_room_data"), System.ComponentModel.Description("Export all room data from project. Returns array of {name, number, area (m²), perimeter, level, department, volume (m³)}. Use for space analysis and reporting.")]
         public static async Task<string> ExportRoomData()
         {
             try
             {
-                var result = await SendToRevit("export_room_data");
+                var result = await ToolGateway.SendToRevit("export_room_data");
                 return JsonConvert.SerializeObject(result, Formatting.Indented);
             }
             catch (Exception ex) { return $"Error: {ex.Message}"; }
         }
+    }
 
+    [McpServerToolType, Toolset("annotation")]
+    public class AnnotationTools
+    {
         [McpServerTool(Name = "tag_all_walls"), System.ComponentModel.Description("Tag all walls in current view with wall type tags at midpoint. Skips already-tagged walls. Returns count of new tags placed.")]
         public static async Task<string> TagAllWalls()
         {
             try
             {
-                var result = await SendToRevit("tag_all_walls");
+                var result = await ToolGateway.SendToRevit("tag_all_walls");
                 return JsonConvert.SerializeObject(result, Formatting.Indented);
             }
             catch (Exception ex) { return $"Error: {ex.Message}"; }
@@ -509,26 +608,41 @@ namespace Bimwright.Server
         {
             try
             {
-                var result = await SendToRevit("tag_all_rooms");
+                var result = await ToolGateway.SendToRevit("tag_all_rooms");
                 return JsonConvert.SerializeObject(result, Formatting.Indented);
             }
             catch (Exception ex) { return $"Error: {ex.Message}"; }
         }
+    }
 
-        // --- Phase 6: Dynamic Code Execution ---
+    [McpServerToolType, Toolset("mep")]
+    public class MepTools
+    {
+        [McpServerTool(Name = "detect_system_elements"), System.ComponentModel.Description("Detect all elements in a MEP system from a seed element ID. Traverses connectors to find all pipes, fittings, accessories, and equipment in the same system. Returns element IDs grouped by category and bounding box in mm. Use get_selected_elements first to get an element ID.")]
+        public static async Task<string> DetectSystemElements(long elementId)
+        {
+            try
+            {
+                var result = await ToolGateway.SendToRevit("detect_system_elements", new { elementId });
+                return JsonConvert.SerializeObject(result, Formatting.Indented);
+            }
+            catch (Exception ex) { return $"Error: {ex.Message}"; }
+        }
+    }
 
+    [McpServerToolType, Toolset("toolbaker")]
+    public class ToolbakerTools
+    {
         [McpServerTool(Name = "send_code_to_revit"), System.ComponentModel.Description("LAST RESORT — use other MCP tools first. Send C# code to Revit for dynamic compilation and execution. Risk: can crash Revit or corrupt data. Variables available: doc (Document), uidoc (UIDocument), app (UIApplication). Write code body only — auto-wrapped in static Run(UIApplication). Must end with 'return ...;'. Available namespaces: System, System.Linq, System.Collections.Generic, Autodesk.Revit.DB, Autodesk.Revit.UI. Common patterns: FilteredElementCollector for querying elements, Transaction for model modifications, UnitUtils.ConvertFromInternalUnits(value, UnitTypeId.Millimeters) for unit conversion, uidoc.Selection.SetElementIds() to select elements, OverrideGraphicSettings for visual overrides.")]
         public static async Task<string> SendCodeToRevit(string code)
         {
             try
             {
-                var result = await SendToRevit("send_code_to_revit", new { code });
+                var result = await ToolGateway.SendToRevit("send_code_to_revit", new { code });
                 return JsonConvert.SerializeObject(result, Formatting.Indented);
             }
             catch (Exception ex) { return $"Error: {ex.Message}"; }
         }
-
-        // --- ToolBaker: Self-evolution engine ---
 
         [McpServerTool(Name = "bake_tool"), System.ComponentModel.Description(
             "Bake a new permanent tool from C# code. The code has access to: app (UIApplication), doc (Document), " +
@@ -539,7 +653,7 @@ namespace Bimwright.Server
         {
             try
             {
-                var result = await SendToRevit("bake_tool", new { name, description, code, parametersSchema });
+                var result = await ToolGateway.SendToRevit("bake_tool", new { name, description, code, parametersSchema });
                 return JsonConvert.SerializeObject(result, Formatting.Indented);
             }
             catch (Exception ex) { return $"Error: {ex.Message}"; }
@@ -552,7 +666,7 @@ namespace Bimwright.Server
         {
             try
             {
-                var result = await SendToRevit("list_baked_tools");
+                var result = await ToolGateway.SendToRevit("list_baked_tools");
                 return JsonConvert.SerializeObject(result, Formatting.Indented);
             }
             catch (Exception ex) { return $"Error: {ex.Message}"; }
@@ -565,64 +679,30 @@ namespace Bimwright.Server
         {
             try
             {
-                var result = await SendToRevit("run_baked_tool", new { name, @params });
+                var result = await ToolGateway.SendToRevit("run_baked_tool", new { name, @params });
                 return JsonConvert.SerializeObject(result, Formatting.Indented);
             }
             catch (Exception ex) { return $"Error: {ex.Message}"; }
         }
+    }
 
-        // --- Phase 7: Views & Sheets ---
-
-        [McpServerTool(Name = "create_view"), System.ComponentModel.Description("Create a view. Params: viewType (floorplan, 3d), level (name, for floorplan), name (optional).")]
-        public static async Task<string> CreateView(string viewType, string level = "", string name = "")
+    [McpServerToolType, Toolset("meta")]
+    public class MetaTools
+    {
+        [McpServerTool(Name = "show_message"), System.ComponentModel.Description("Display a TaskDialog inside Revit with an optional custom message. Use for connection testing, user notifications, or feedback during automation flows. Both 'message' and 'title' are optional — omit for default greeting.")]
+        public static async Task<string> ShowMessage(string message = null, string title = null)
         {
             try
             {
-                var result = await SendToRevit("create_view", new { viewType, level, name });
-                return JsonConvert.SerializeObject(result, Formatting.Indented);
+                object parameters = null;
+                if (!string.IsNullOrWhiteSpace(message) || !string.IsNullOrWhiteSpace(title))
+                {
+                    parameters = new { message, title };
+                }
+                var result = await ToolGateway.SendToRevit("show_message", parameters);
+                return JsonConvert.SerializeObject(result);
             }
             catch (Exception ex) { return $"Error: {ex.Message}"; }
-        }
-
-        [McpServerTool(Name = "place_view_on_sheet"), System.ComponentModel.Description("Place a view on a sheet. Creates new sheet if sheetId not provided. Params: viewId (required), sheetId (optional), sheetNumber (optional), sheetName (optional).")]
-        public static async Task<string> PlaceViewOnSheet(long viewId, long? sheetId = null, string sheetNumber = "", string sheetName = "MCP Generated Sheet")
-        {
-            try
-            {
-                var result = await SendToRevit("place_view_on_sheet", new { viewId, sheetId, sheetNumber, sheetName });
-                return JsonConvert.SerializeObject(result, Formatting.Indented);
-            }
-            catch (Exception ex) { return $"Error: {ex.Message}"; }
-        }
-
-        // --- Phase 10: New tools ---
-
-        [McpServerTool(Name = "detect_system_elements"), System.ComponentModel.Description("Detect all elements in a MEP system from a seed element ID. Traverses connectors to find all pipes, fittings, accessories, and equipment in the same system. Returns element IDs grouped by category and bounding box in mm. Use get_selected_elements first to get an element ID.")]
-        public static async Task<string> DetectSystemElements(long elementId)
-        {
-            try
-            {
-                var result = await SendToRevit("detect_system_elements", new { elementId });
-                return JsonConvert.SerializeObject(result, Formatting.Indented);
-            }
-            catch (Exception ex)
-            {
-                return $"Error: {ex.Message}";
-            }
-        }
-
-        [McpServerTool(Name = "analyze_sheet_layout"), System.ComponentModel.Description("Analyze a sheet's title block dimensions and viewport positions/scales in mm. Provide sheetNumber (e.g. 'ISO-005') or sheetId. If neither, uses active view when it is a sheet. Returns title block size, viewport centers, widths, heights, and scales.")]
-        public static async Task<string> AnalyzeSheetLayout(string sheetNumber = "", long? sheetId = null)
-        {
-            try
-            {
-                var result = await SendToRevit("analyze_sheet_layout", new { sheetNumber, sheetId });
-                return JsonConvert.SerializeObject(result, Formatting.Indented);
-            }
-            catch (Exception ex)
-            {
-                return $"Error: {ex.Message}";
-            }
         }
 
         [McpServerTool(Name = "analyze_usage_patterns"), System.ComponentModel.Description(
@@ -634,7 +714,7 @@ namespace Bimwright.Server
         {
             try
             {
-                var session = Session;
+                var session = ToolGateway.Session;
                 if (session == null) return JsonConvert.SerializeObject(new { error = "No active session" });
 
                 var report = session.GetPatternReport();
