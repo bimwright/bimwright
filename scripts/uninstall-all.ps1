@@ -123,6 +123,36 @@ function Invoke-Step2-DotnetTool {
     }
 }
 
+function Remove-CodexEntries {
+    $cfgPath = Join-Path $env:USERPROFILE '.codex\config.toml'
+    if (-not (Test-Path $cfgPath)) {
+        Write-Host "[step3.codex] config not present — nothing to unwire"
+        $script:skipped += 'step3-codex'
+        return
+    }
+
+    $raw = Get-Content -Raw -Path $cfgPath -Encoding UTF8
+    if ($null -eq $raw) { $raw = '' }
+
+    $pattern = '(?ms)^\[mcp_servers\.bimwright-rvt-r\d{2}\].*?(?=^\[|\z)'
+    $blockMatches = [regex]::Matches($raw, $pattern)
+    if ($blockMatches.Count -eq 0) {
+        Write-Host "[step3.codex] no bimwright-rvt-* blocks — skipping"
+        $script:skipped += 'step3-codex'
+        return
+    }
+
+    $new = [regex]::Replace($raw, $pattern, '')
+    # Collapse triple+ blank lines left behind by removal
+    $new = [regex]::Replace($new, "(\r?\n){3,}", "`n`n")
+
+    if ($PSCmdlet.ShouldProcess($cfgPath, ("Remove {0} [mcp_servers.bimwright-rvt-*] blocks" -f $blockMatches.Count))) {
+        $bak = Write-ConfigAtomic -Path $cfgPath -Content $new
+        Write-Host ("[step3.codex] removed {0} blocks -> {1} (backup: {2})" -f $blockMatches.Count, $cfgPath, $bak)
+    }
+    $script:handled += 'step3-codex'
+}
+
 function Remove-OpencodeEntries {
     $cfgPath = Join-Path $env:USERPROFILE '.config\opencode\opencode.json'
     if (-not (Test-Path $cfgPath)) {
@@ -168,7 +198,8 @@ $planned = @(
     'Step1: plugin + .addin (all detected Revit years via install.ps1 -Uninstall)'
     'Step2: .NET global tool Bimwright.Rvt.Server'
     'Step3.opencode: bimwright-rvt-* keys in .config\opencode\opencode.json'
-    # Steps 3b-5 added in later tasks
+    'Step3.codex: [mcp_servers.bimwright-rvt-*] blocks in .codex\config.toml'
+    # Steps 3c-5 added in later tasks
 )
 
 if (-not (Confirm-Sweep $planned)) {
@@ -179,6 +210,7 @@ if (-not (Confirm-Sweep $planned)) {
 Invoke-Step1-Plugin
 Invoke-Step2-DotnetTool
 Remove-OpencodeEntries
+Remove-CodexEntries
 
 Write-Host ""
 Write-Host "=== uninstall-all.ps1 summary ==="
