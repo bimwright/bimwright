@@ -33,7 +33,9 @@
 param(
     [string]$SourceDir,
     [switch]$Uninstall,
-    [int[]]$Years
+    [int[]]$Years,
+    [ValidateSet('opencode', 'codex')]
+    [string]$WireClient
 )
 
 $ErrorActionPreference = 'Stop'
@@ -56,6 +58,24 @@ function Get-InstalledRevitYears {
 
 function Get-AddinsRoot([int]$year) {
     return Join-Path $env:APPDATA ("Autodesk\Revit\Addins\{0}" -f $year)
+}
+
+function Get-BimwrightYearTargets([int[]]$years) {
+    # Returns array of PSCustomObjects for plugin-supported years only (2022-2027).
+    # Years outside this range are silently skipped — callers may pass raw $Years
+    # which can include unsupported values (e.g. synthetic 2099 in edge tests).
+    $targets = @()
+    foreach ($y in $years) {
+        if ($y -lt 2022 -or $y -gt 2027) { continue }
+        $yt = "{0:D2}" -f ($y - 2000)
+        $targets += [pscustomobject]@{
+            Year      = $y
+            YearTwo   = $yt
+            Target    = "R$yt"
+            ServerCmd = 'bimwright-rvt'
+        }
+    }
+    return $targets
 }
 
 if (-not $Years -or $Years.Count -eq 0) {
