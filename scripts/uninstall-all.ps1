@@ -24,7 +24,10 @@
   Skip the interactive confirmation prompt.
 
 .PARAMETER KeepLogs
-  Preserve %LOCALAPPDATA%\Bimwright\logs\ during step 4.
+  Preserve log files during step 4:
+  - any `logs\` subdirectory (recursively)
+  - any loose `*.log` / `*.jsonl` files at the root of %LOCALAPPDATA%\Bimwright\
+  Other files and subdirectories are removed.
 
 .EXAMPLE
   pwsh scripts/uninstall-all.ps1 -WhatIf
@@ -131,20 +134,30 @@ function Invoke-Step4-Discovery {
         return
     }
 
-    $logsPath = Join-Path $root 'logs'
     $toolBakerPath = Join-Path $root 'ToolBaker'
     $hasToolBaker = Test-Path $toolBakerPath
 
-    if ($KeepLogs -and (Test-Path $logsPath)) {
-        # Remove everything inside $root EXCEPT logs\
+    if ($KeepLogs) {
+        # Preserve: `logs\` subdirectory, and any loose *.log / *.jsonl files at the root.
+        $preserved = @()
         $entries = Get-ChildItem -Path $root -Force
         foreach ($e in $entries) {
-            if ($e.Name -eq 'logs') { continue }
+            $keep = $false
+            if ($e.PSIsContainer) {
+                if ($e.Name -eq 'logs') { $keep = $true }
+            } else {
+                if ($e.Extension -in @('.log', '.jsonl')) { $keep = $true }
+            }
+            if ($keep) {
+                $preserved += $e.Name
+                continue
+            }
             if ($PSCmdlet.ShouldProcess($e.FullName, 'Remove-Item -Recurse')) {
                 Remove-Item -Path $e.FullName -Recurse -Force
             }
         }
-        Write-Host ("[step4] cleaned {0} (kept logs\)" -f $root)
+        $keptMsg = if ($preserved.Count -gt 0) { ($preserved -join ', ') } else { '(nothing to keep)' }
+        Write-Host ("[step4] cleaned {0} (kept: {1})" -f $root, $keptMsg)
     } else {
         if ($PSCmdlet.ShouldProcess($root, 'Remove-Item -Recurse')) {
             Remove-Item -Path $root -Recurse -Force
