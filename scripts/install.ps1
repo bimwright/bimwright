@@ -78,6 +78,31 @@ function Get-BimwrightYearTargets([int[]]$years) {
     return $targets
 }
 
+function Write-ConfigAtomic {
+    # Atomic config-file writer used by both wire and unwire helpers.
+    # Creates <path>.bimwright.bak, writes <path>.bimwright.tmp, then
+    # [System.IO.File]::Replace swaps in one NTFS transaction. On any failure
+    # during the temp-write/replace sequence, the stale .tmp is cleaned up
+    # so a failed run never leaves an orphaned .bimwright.tmp beside the config.
+    # Returns the backup path.
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Content
+    )
+    $bak = "$Path.bimwright.bak"
+    Copy-Item -Path $Path -Destination $bak -Force
+    $temp = "$Path.bimwright.tmp"
+    try {
+        Set-Content -Path $temp -Value $Content -Encoding UTF8 -NoNewline
+        [System.IO.File]::Replace($temp, $Path, [NullString]::Value)
+    } catch {
+        if (Test-Path $temp) { Remove-Item $temp -Force -ErrorAction SilentlyContinue }
+        throw
+    }
+    return $bak
+}
+
 function Add-OpencodeEntry {
     [CmdletBinding(SupportsShouldProcess = $true)]
     param(
@@ -126,13 +151,8 @@ function Add-OpencodeEntry {
     }
 
     if ($PSCmdlet.ShouldProcess($ConfigPath, 'Upsert bimwright-rvt-* entries')) {
-        $bak = "$ConfigPath.bimwright.bak"
-        Copy-Item -Path $ConfigPath -Destination $bak -Force
-        $temp = "$ConfigPath.bimwright.tmp"
-        ($cfg | ConvertTo-Json -Depth 50) | Set-Content -Path $temp -Encoding UTF8 -NoNewline
-        # [NullString]::Value is required because PowerShell marshals bare $null to "" for
-        # string parameters, which File.Replace rejects with "The path is empty".
-        [System.IO.File]::Replace($temp, $ConfigPath, [NullString]::Value)
+        $content = $cfg | ConvertTo-Json -Depth 50
+        $bak = Write-ConfigAtomic -Path $ConfigPath -Content $content
         Write-Host ("[opencode] wired {0} entries -> {1} (backup: {2})" -f $desired.Count, $ConfigPath, $bak)
     }
     return $true
@@ -187,12 +207,7 @@ enabled = true
     }
 
     if ($PSCmdlet.ShouldProcess($ConfigPath, 'Upsert [mcp_servers.bimwright-rvt-*] blocks')) {
-        $bak = "$ConfigPath.bimwright.bak"
-        Copy-Item -Path $ConfigPath -Destination $bak -Force
-        $temp = "$ConfigPath.bimwright.tmp"
-        Set-Content -Path $temp -Value $raw -Encoding UTF8 -NoNewline
-        # [NullString]::Value — PowerShell otherwise sends "" which File.Replace rejects.
-        [System.IO.File]::Replace($temp, $ConfigPath, [NullString]::Value)
+        $bak = Write-ConfigAtomic -Path $ConfigPath -Content $raw
         Write-Host ("[codex] wired bimwright-rvt-* blocks -> {0} (backup: {1})" -f $ConfigPath, $bak)
     }
     return $true
