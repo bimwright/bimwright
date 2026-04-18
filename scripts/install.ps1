@@ -78,6 +78,66 @@ function Get-BimwrightYearTargets([int[]]$years) {
     return $targets
 }
 
+function Add-OpencodeEntry {
+    [CmdletBinding(SupportsShouldProcess = $true)]
+    param(
+        [Parameter(Mandatory = $true)][string]$ConfigPath,
+        [Parameter(Mandatory = $true)][object[]]$Targets
+    )
+
+    if (-not (Test-Path $ConfigPath)) {
+        Write-Warning ("[opencode] config not found at {0} — skipping wire" -f $ConfigPath)
+        return $false
+    }
+
+    try {
+        $raw = Get-Content -Raw -Path $ConfigPath
+        $cfg = $raw | ConvertFrom-Json -AsHashtable -Depth 50
+    } catch {
+        Write-Warning ("[opencode] parse failed at {0}: {1} — skipping" -f $ConfigPath, $_.Exception.Message)
+        return $false
+    }
+
+    if (-not $cfg.ContainsKey('mcp')) { $cfg['mcp'] = @{} }
+
+    $desired = @{}
+    foreach ($t in $Targets) {
+        $name = "bimwright-rvt-r$($t.YearTwo)"
+        $desired[$name] = [ordered]@{
+            type    = 'local'
+            command = @($t.ServerCmd, '--target', $t.Target)
+            enabled = $true
+        }
+    }
+
+    $changed = $false
+    foreach ($k in $desired.Keys) {
+        $existingJson = if ($cfg['mcp'].ContainsKey($k)) { ($cfg['mcp'][$k] | ConvertTo-Json -Depth 20 -Compress) } else { $null }
+        $newJson = $desired[$k] | ConvertTo-Json -Depth 20 -Compress
+        if ($existingJson -ne $newJson) {
+            $cfg['mcp'][$k] = $desired[$k]
+            $changed = $true
+        }
+    }
+
+    if (-not $changed) {
+        Write-Host ("[opencode] no changes needed at {0}" -f $ConfigPath)
+        return $true
+    }
+
+    if ($PSCmdlet.ShouldProcess($ConfigPath, 'Upsert bimwright-rvt-* entries')) {
+        $bak = "$ConfigPath.bimwright.bak"
+        Copy-Item -Path $ConfigPath -Destination $bak -Force
+        $temp = "$ConfigPath.bimwright.tmp"
+        ($cfg | ConvertTo-Json -Depth 50) | Set-Content -Path $temp -Encoding UTF8 -NoNewline
+        # [NullString]::Value is required because PowerShell marshals bare $null to "" for
+        # string parameters, which File.Replace rejects with "The path is empty".
+        [System.IO.File]::Replace($temp, $ConfigPath, [NullString]::Value)
+        Write-Host ("[opencode] wired {0} entries -> {1} (backup: {2})" -f $desired.Count, $ConfigPath, $bak)
+    }
+    return $true
+}
+
 if (-not $Years -or $Years.Count -eq 0) {
     $Years = Get-InstalledRevitYears
     if ($Years.Count -eq 0) {
