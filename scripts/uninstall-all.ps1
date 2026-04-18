@@ -123,11 +123,52 @@ function Invoke-Step2-DotnetTool {
     }
 }
 
+function Remove-OpencodeEntries {
+    $cfgPath = Join-Path $env:USERPROFILE '.config\opencode\opencode.json'
+    if (-not (Test-Path $cfgPath)) {
+        Write-Host "[step3.opencode] config not present — nothing to unwire"
+        $script:skipped += 'step3-opencode'
+        return
+    }
+
+    try {
+        $cfg = (Get-Content -Raw -Path $cfgPath) | ConvertFrom-Json -AsHashtable -Depth 50
+    } catch {
+        Write-Warning ("[step3.opencode] parse failed at {0}: {1} — skipping" -f $cfgPath, $_.Exception.Message)
+        $script:failed += 'step3-opencode'
+        return
+    }
+
+    if (-not $cfg.ContainsKey('mcp') -or $cfg['mcp'].Count -eq 0) {
+        Write-Host "[step3.opencode] no mcp entries — skipping"
+        $script:skipped += 'step3-opencode'
+        return
+    }
+
+    $bimKeys = @($cfg['mcp'].Keys | Where-Object { $_ -like 'bimwright-rvt-*' })
+    if ($bimKeys.Count -eq 0) {
+        Write-Host "[step3.opencode] no bimwright-rvt-* entries — skipping"
+        $script:skipped += 'step3-opencode'
+        return
+    }
+
+    foreach ($k in $bimKeys) { $cfg['mcp'].Remove($k) | Out-Null }
+    if ($cfg['mcp'].Count -eq 0) { $cfg.Remove('mcp') | Out-Null }
+
+    if ($PSCmdlet.ShouldProcess($cfgPath, ("Remove {0} bimwright-rvt-* entries" -f $bimKeys.Count))) {
+        $content = $cfg | ConvertTo-Json -Depth 50
+        $bak = Write-ConfigAtomic -Path $cfgPath -Content $content
+        Write-Host ("[step3.opencode] removed {0} entries -> {1} (backup: {2})" -f $bimKeys.Count, $cfgPath, $bak)
+    }
+    $script:handled += 'step3-opencode'
+}
+
 # --- Main ---
 $planned = @(
     'Step1: plugin + .addin (all detected Revit years via install.ps1 -Uninstall)'
     'Step2: .NET global tool Bimwright.Rvt.Server'
-    # Steps 3-5 added in later tasks
+    'Step3.opencode: bimwright-rvt-* keys in .config\opencode\opencode.json'
+    # Steps 3b-5 added in later tasks
 )
 
 if (-not (Confirm-Sweep $planned)) {
@@ -137,6 +178,7 @@ if (-not (Confirm-Sweep $planned)) {
 
 Invoke-Step1-Plugin
 Invoke-Step2-DotnetTool
+Remove-OpencodeEntries
 
 Write-Host ""
 Write-Host "=== uninstall-all.ps1 summary ==="
