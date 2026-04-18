@@ -78,6 +78,43 @@ Thêm 1 entry cho mỗi năm Revit vào config MCP của client (ví dụ `.mcp.
 
 Bỏ flag `--target` thì Bimwright auto-detect Revit đang chạy qua discovery file trong `%LOCALAPPDATA%\Bimwright\`.
 
+#### Kịch bản tự động wire cho OpenCode / Codex Desktop
+
+Thay vì sửa tay `opencode.json` hoặc `~/.codex/config.toml`, chạy:
+
+```powershell
+pwsh install.ps1 -WireClient opencode      # ghi entry vào %USERPROFILE%\.config\opencode\opencode.json
+pwsh install.ps1 -WireClient codex         # ghi entry vào %USERPROFILE%\.codex\config.toml
+pwsh install.ps1 -WireClient opencode -WhatIf   # xem trước
+```
+
+Script sẽ:
+
+- Thêm một entry `bimwright-rvt-r<YY>` cho mỗi phiên bản Revit được phát hiện trên máy.
+- Giữ nguyên mọi entry không thuộc bimwright đã có trong config (merge tại chỗ).
+- Sao lưu file gốc thành `<file>.bimwright.bak` trước khi ghi.
+- Không làm gì nếu config của host không tồn tại (chưa cài host đó).
+
+Người dùng Claude Code: dán đoạn JSON ở trên vào `.mcp.json` của project — script không tự sửa file cấp project.
+
+### Gỡ bỏ toàn bộ
+
+Xóa plugin, .NET global tool, entry trong config của host, discovery files và ToolBaker cache trong một lần:
+
+```powershell
+pwsh uninstall-all.ps1 -WhatIf    # xem trước những gì sẽ bị xóa
+pwsh uninstall-all.ps1            # xác nhận tương tác rồi thực thi
+pwsh uninstall-all.ps1 -Yes       # bỏ qua prompt
+pwsh uninstall-all.ps1 -KeepLogs  # giữ lại file *.log và *.jsonl
+```
+
+Lưu ý:
+
+- Script gỡ `Bimwright.Rvt.Server` khỏi **toàn bộ máy** (`dotnet tool uninstall -g`), không chỉ thư mục hiện tại.
+- File `.mcp.json` cấp project không được quét — hãy xóa tay các entry `bimwright-rvt-*` trong đó.
+- `install.ps1 -Uninstall` vẫn chỉ gỡ plugin (tương thích ngược).
+- `-KeepLogs` giữ thư mục `logs\` (nếu có) và các file `*.log` / `*.jsonl` ở cấp gốc trong `%LOCALAPPDATA%\Bimwright\`.
+
 ---
 
 ## Supported MCP clients
