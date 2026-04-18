@@ -123,6 +123,48 @@ function Invoke-Step2-DotnetTool {
     }
 }
 
+function Remove-ClaudeCodeGlobalEntries {
+    $candidates = @(
+        (Join-Path $env:USERPROFILE '.claude.json'),
+        (Join-Path $env:USERPROFILE '.claude\mcp.json')
+    )
+
+    $touched = $false
+    foreach ($cfgPath in $candidates) {
+        if (-not (Test-Path $cfgPath)) { continue }
+
+        try {
+            $cfg = (Get-Content -Raw -Path $cfgPath) | ConvertFrom-Json -AsHashtable -Depth 50
+        } catch {
+            Write-Warning ("[step3.claude] parse failed at {0} — skipping this file" -f $cfgPath)
+            continue
+        }
+
+        # Claude Code uses 'mcpServers' (plural camelCase) per its docs
+        if (-not $cfg.ContainsKey('mcpServers') -or $cfg['mcpServers'].Count -eq 0) { continue }
+
+        $bimKeys = @($cfg['mcpServers'].Keys | Where-Object { $_ -like 'bimwright-rvt-*' })
+        if ($bimKeys.Count -eq 0) { continue }
+
+        foreach ($k in $bimKeys) { $cfg['mcpServers'].Remove($k) | Out-Null }
+
+        if ($PSCmdlet.ShouldProcess($cfgPath, ("Remove {0} bimwright-rvt-* entries" -f $bimKeys.Count))) {
+            $content = $cfg | ConvertTo-Json -Depth 50
+            $bak = Write-ConfigAtomic -Path $cfgPath -Content $content
+            Write-Host ("[step3.claude] removed {0} entries -> {1} (backup: {2})" -f $bimKeys.Count, $cfgPath, $bak)
+        }
+        $touched = $true
+    }
+
+    if ($touched) { $script:handled += 'step3-claude-global' }
+    else          { $script:skipped += 'step3-claude-global' }
+
+    Write-Host ""
+    Write-Host "[step3.claude] NOTE: project-level .mcp.json files are not auto-scanned."
+    Write-Host "               If you added bimwright-rvt-* to any project's .mcp.json manually,"
+    Write-Host "               remove those entries by hand."
+}
+
 function Remove-CodexEntries {
     $cfgPath = Join-Path $env:USERPROFILE '.codex\config.toml'
     if (-not (Test-Path $cfgPath)) {
@@ -199,7 +241,8 @@ $planned = @(
     'Step2: .NET global tool Bimwright.Rvt.Server'
     'Step3.opencode: bimwright-rvt-* keys in .config\opencode\opencode.json'
     'Step3.codex: [mcp_servers.bimwright-rvt-*] blocks in .codex\config.toml'
-    # Steps 3c-5 added in later tasks
+    'Step3.claude: bimwright-rvt-* in ~/.claude.json and ~/.claude/mcp.json (global only)'
+    # Steps 4-5 added in later tasks
 )
 
 if (-not (Confirm-Sweep $planned)) {
@@ -211,6 +254,7 @@ Invoke-Step1-Plugin
 Invoke-Step2-DotnetTool
 Remove-OpencodeEntries
 Remove-CodexEntries
+Remove-ClaudeCodeGlobalEntries
 
 Write-Host ""
 Write-Host "=== uninstall-all.ps1 summary ==="
