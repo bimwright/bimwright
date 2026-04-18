@@ -153,14 +153,26 @@ function Invoke-Step4-Discovery {
                 continue
             }
             if ($PSCmdlet.ShouldProcess($e.FullName, 'Remove-Item -Recurse')) {
-                Remove-Item -Path $e.FullName -Recurse -Force
+                try {
+                    Remove-Item -Path $e.FullName -Recurse -Force
+                } catch {
+                    Write-Warning ("[step4] failed to remove {0}: {1}" -f $e.FullName, $_.Exception.Message)
+                    $script:failed += 'step4-discovery'
+                    return
+                }
             }
         }
         $keptMsg = if ($preserved.Count -gt 0) { ($preserved -join ', ') } else { '(nothing to keep)' }
         Write-Host ("[step4] cleaned {0} (kept: {1})" -f $root, $keptMsg)
     } else {
         if ($PSCmdlet.ShouldProcess($root, 'Remove-Item -Recurse')) {
-            Remove-Item -Path $root -Recurse -Force
+            try {
+                Remove-Item -Path $root -Recurse -Force
+            } catch {
+                Write-Warning ("[step4] failed to remove {0}: {1}" -f $root, $_.Exception.Message)
+                $script:failed += 'step4-discovery'
+                return
+            }
         }
         Write-Host ("[step4] removed {0}" -f $root)
     }
@@ -195,6 +207,7 @@ function Remove-ClaudeCodeGlobalEntries {
         if ($bimKeys.Count -eq 0) { continue }
 
         foreach ($k in $bimKeys) { $cfg['mcpServers'].Remove($k) | Out-Null }
+        if ($cfg['mcpServers'].Count -eq 0) { $cfg.Remove('mcpServers') | Out-Null }
 
         if ($PSCmdlet.ShouldProcess($cfgPath, ("Remove {0} bimwright-rvt-* entries" -f $bimKeys.Count))) {
             $content = $cfg | ConvertTo-Json -Depth 50
@@ -298,19 +311,24 @@ if (-not (Confirm-Sweep $planned)) {
     return
 }
 
-Invoke-Step1-Plugin
-Invoke-Step2-DotnetTool
-Remove-OpencodeEntries
-Remove-CodexEntries
-Remove-ClaudeCodeGlobalEntries
-Invoke-Step4-Discovery
-
-Write-Host ""
-Write-Host "=== uninstall-all.ps1 summary ==="
-$mode = if ($WhatIfPreference) { 'WhatIf (no changes)' } else { 'Execute' }
-Write-Host ("Mode   : {0}" -f $mode)
-Write-Host ("Handled: {0}" -f (($script:handled) -join ', '))
-if ($script:skipped.Count -gt 0) { Write-Host ("Skipped: {0}" -f (($script:skipped) -join ', ')) }
-if ($script:failed.Count  -gt 0) { Write-Host ("Failed : {0}" -f (($script:failed)  -join ', ')) }
+try {
+    Invoke-Step1-Plugin
+    Invoke-Step2-DotnetTool
+    Remove-OpencodeEntries
+    Remove-CodexEntries
+    Remove-ClaudeCodeGlobalEntries
+    Invoke-Step4-Discovery
+} catch {
+    Write-Warning ("[main] unexpected error — summary follows. Error: {0}" -f $_.Exception.Message)
+    $script:failed += 'main-unexpected-error'
+} finally {
+    Write-Host ""
+    Write-Host "=== uninstall-all.ps1 summary ==="
+    $mode = if ($WhatIfPreference) { 'WhatIf (no changes)' } else { 'Execute' }
+    Write-Host ("Mode   : {0}" -f $mode)
+    Write-Host ("Handled: {0}" -f (($script:handled) -join ', '))
+    if ($script:skipped.Count -gt 0) { Write-Host ("Skipped: {0}" -f (($script:skipped) -join ', ')) }
+    if ($script:failed.Count  -gt 0) { Write-Host ("Failed : {0}" -f (($script:failed)  -join ', ')) }
+}
 
 if ($script:failed.Count -gt 0) { exit 1 } else { exit 0 }
