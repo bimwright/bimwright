@@ -294,6 +294,8 @@ Invoke-Step4-Discovery
 
 Write-Host ""
 Write-Host "=== uninstall-all.ps1 summary ==="
+$mode = if ($WhatIfPreference) { 'WhatIf (no changes)' } else { 'Execute' }
+Write-Host ("Mode   : {0}" -f $mode)
 Write-Host ("Handled: {0}" -f (($script:handled) -join ', '))
 if ($script:skipped.Count -gt 0) { Write-Host ("Skipped: {0}" -f (($script:skipped) -join ', ')) }
 if ($script:failed.Count  -gt 0) { Write-Host ("Failed : {0}" -f (($script:failed)  -join ', ')) }
