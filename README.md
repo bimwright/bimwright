@@ -80,6 +80,43 @@ Add one entry per Revit year to your client's MCP config (e.g. `.mcp.json`):
 
 Drop the `--target` flag and Bimwright auto-detects the running Revit instance via discovery files in `%LOCALAPPDATA%\Bimwright\`.
 
+#### Scripted wire for OpenCode / Codex Desktop
+
+Instead of hand-editing `opencode.json` or `~/.codex/config.toml`, run:
+
+```powershell
+pwsh install.ps1 -WireClient opencode      # writes entries into %USERPROFILE%\.config\opencode\opencode.json
+pwsh install.ps1 -WireClient codex         # writes entries into %USERPROFILE%\.codex\config.toml
+pwsh install.ps1 -WireClient opencode -WhatIf   # preview
+```
+
+The script:
+
+- Adds one `bimwright-rvt-r<YY>` entry per Revit year detected on this machine.
+- Preserves every non-bimwright entry already in the config (merge-in-place).
+- Backs up the original as `<file>.bimwright.bak` before writing.
+- Does nothing if the host's config file is not present (host not installed).
+
+Claude Code users: paste the JSON snippet above into your project's `.mcp.json` — the scripted path does not auto-edit project-level files.
+
+### Uninstall everything
+
+To remove plugin, .NET global tool, host-config entries, discovery files, and ToolBaker cache in one pass:
+
+```powershell
+pwsh uninstall-all.ps1 -WhatIf    # preview what will be removed
+pwsh uninstall-all.ps1            # interactive confirm, then execute
+pwsh uninstall-all.ps1 -Yes       # skip prompt
+pwsh uninstall-all.ps1 -KeepLogs  # preserve *.log and *.jsonl files
+```
+
+Notes:
+
+- This removes `Bimwright.Rvt.Server` from **every** project on the machine (`dotnet tool uninstall -g`), not just the current directory.
+- Project-level `.mcp.json` files are not scanned — remove any `bimwright-rvt-*` entries in those manually.
+- `install.ps1 -Uninstall` remains the narrow plugin-only uninstall (backward compatible).
+- `-KeepLogs` preserves the `logs\` subdirectory if present, plus any root-level `*.log` / `*.jsonl` files inside `%LOCALAPPDATA%\Bimwright\`.
+
 ---
 
 ## Supported MCP clients
