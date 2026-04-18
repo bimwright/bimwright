@@ -138,6 +138,66 @@ function Add-OpencodeEntry {
     return $true
 }
 
+function Add-CodexEntry {
+    [CmdletBinding(SupportsShouldProcess = $true)]
+    param(
+        [Parameter(Mandatory = $true)][string]$ConfigPath,
+        [Parameter(Mandatory = $true)][object[]]$Targets
+    )
+
+    if (-not (Test-Path $ConfigPath)) {
+        Write-Warning ("[codex] config not found at {0} — skipping wire" -f $ConfigPath)
+        return $false
+    }
+
+    $raw = Get-Content -Raw -Path $ConfigPath -Encoding UTF8
+    if ($null -eq $raw) { $raw = '' }
+
+    $changed = $false
+
+    foreach ($t in $Targets) {
+        $name = "bimwright-rvt-r$($t.YearTwo)"
+        $headerLiteral = "[mcp_servers.$name]"
+        $desiredBlock = @"
+$headerLiteral
+command = "$($t.ServerCmd)"
+args = ["--target", "$($t.Target)"]
+enabled = true
+"@
+
+        $pattern = '(?ms)^\[mcp_servers\.' + [regex]::Escape($name) + '\].*?(?=^\[|\z)'
+        $existingMatch = [regex]::Match($raw, $pattern)
+        if ($existingMatch.Success) {
+            $existingTrim = ($existingMatch.Value -replace '\s+$', '')
+            $desiredTrim = ($desiredBlock -replace '\s+$', '')
+            if ($existingTrim -ne $desiredTrim) {
+                $raw = [regex]::Replace($raw, $pattern, ($desiredBlock + "`n`n"), 1)
+                $changed = $true
+            }
+        } else {
+            $sep = if ($raw.EndsWith("`n")) { "`n" } else { "`n`n" }
+            $raw = $raw + $sep + $desiredBlock + "`n"
+            $changed = $true
+        }
+    }
+
+    if (-not $changed) {
+        Write-Host ("[codex] no changes needed at {0}" -f $ConfigPath)
+        return $true
+    }
+
+    if ($PSCmdlet.ShouldProcess($ConfigPath, 'Upsert [mcp_servers.bimwright-rvt-*] blocks')) {
+        $bak = "$ConfigPath.bimwright.bak"
+        Copy-Item -Path $ConfigPath -Destination $bak -Force
+        $temp = "$ConfigPath.bimwright.tmp"
+        Set-Content -Path $temp -Value $raw -Encoding UTF8 -NoNewline
+        # [NullString]::Value — PowerShell otherwise sends "" which File.Replace rejects.
+        [System.IO.File]::Replace($temp, $ConfigPath, [NullString]::Value)
+        Write-Host ("[codex] wired bimwright-rvt-* blocks -> {0} (backup: {1})" -f $ConfigPath, $bak)
+    }
+    return $true
+}
+
 if (-not $Years -or $Years.Count -eq 0) {
     $Years = Get-InstalledRevitYears
     if ($Years.Count -eq 0) {
