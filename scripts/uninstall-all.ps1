@@ -123,6 +123,41 @@ function Invoke-Step2-DotnetTool {
     }
 }
 
+function Invoke-Step4-Discovery {
+    $root = Join-Path $env:LOCALAPPDATA 'Bimwright'
+    if (-not (Test-Path $root)) {
+        Write-Host "[step4] $root not present — nothing to remove"
+        $script:skipped += 'step4-discovery'
+        return
+    }
+
+    $logsPath = Join-Path $root 'logs'
+    $toolBakerPath = Join-Path $root 'ToolBaker'
+    $hasToolBaker = Test-Path $toolBakerPath
+
+    if ($KeepLogs -and (Test-Path $logsPath)) {
+        # Remove everything inside $root EXCEPT logs\
+        $entries = Get-ChildItem -Path $root -Force
+        foreach ($e in $entries) {
+            if ($e.Name -eq 'logs') { continue }
+            if ($PSCmdlet.ShouldProcess($e.FullName, 'Remove-Item -Recurse')) {
+                Remove-Item -Path $e.FullName -Recurse -Force
+            }
+        }
+        Write-Host ("[step4] cleaned {0} (kept logs\)" -f $root)
+    } else {
+        if ($PSCmdlet.ShouldProcess($root, 'Remove-Item -Recurse')) {
+            Remove-Item -Path $root -Recurse -Force
+        }
+        Write-Host ("[step4] removed {0}" -f $root)
+    }
+
+    $script:handled += 'step4-discovery'
+    if ($hasToolBaker) {
+        $script:handled += 'step5-toolbaker (contained)'
+    }
+}
+
 function Remove-ClaudeCodeGlobalEntries {
     $candidates = @(
         (Join-Path $env:USERPROFILE '.claude.json'),
@@ -242,7 +277,7 @@ $planned = @(
     'Step3.opencode: bimwright-rvt-* keys in .config\opencode\opencode.json'
     'Step3.codex: [mcp_servers.bimwright-rvt-*] blocks in .codex\config.toml'
     'Step3.claude: bimwright-rvt-* in ~/.claude.json and ~/.claude/mcp.json (global only)'
-    # Steps 4-5 added in later tasks
+    'Step4: %LOCALAPPDATA%\Bimwright\ (discovery + ToolBaker)'
 )
 
 if (-not (Confirm-Sweep $planned)) {
@@ -255,6 +290,7 @@ Invoke-Step2-DotnetTool
 Remove-OpencodeEntries
 Remove-CodexEntries
 Remove-ClaudeCodeGlobalEntries
+Invoke-Step4-Discovery
 
 Write-Host ""
 Write-Host "=== uninstall-all.ps1 summary ==="
