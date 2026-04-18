@@ -294,6 +294,29 @@ foreach ($year in $Years) {
     $handled += "R$yearTwo"
 }
 
+# --- Optional host wiring (v0.1.1) ---
+$wireStatus = $null
+if ($WireClient -and -not $Uninstall) {
+    $targets = Get-BimwrightYearTargets -years $Years
+    if ($targets.Count -eq 0) {
+        Write-Warning "[wire] no plugin-supported Revit years (2022-2027) detected — skipping $WireClient wire"
+    } else {
+        switch ($WireClient) {
+            'opencode' {
+                $cfgPath = Join-Path $env:USERPROFILE '.config\opencode\opencode.json'
+                $wireStatus = Add-OpencodeEntry -ConfigPath $cfgPath -Targets $targets
+            }
+            'codex' {
+                $cfgPath = Join-Path $env:USERPROFILE '.codex\config.toml'
+                $wireStatus = Add-CodexEntry -ConfigPath $cfgPath -Targets $targets
+            }
+        }
+        if (-not (Get-Command bimwright-rvt -ErrorAction SilentlyContinue)) {
+            Write-Warning "[wire] 'bimwright-rvt' not on PATH — run 'dotnet tool install -g Bimwright.Rvt.Server' before starting the host"
+        }
+    }
+}
+
 Write-Host ""
 Write-Host "=== install.ps1 summary ==="
 Write-Host ("Mode   : {0}" -f ($(if ($Uninstall) { 'Uninstall' } else { 'Install' })))
@@ -301,4 +324,7 @@ Write-Host ("Years  : {0}" -f ($Years -join ', '))
 Write-Host ("Handled: {0}" -f ($handled -join ', '))
 if ($skipped.Count -gt 0) {
     Write-Host ("Skipped: {0}" -f ($skipped -join ', '))
+}
+if ($null -ne $wireStatus) {
+    Write-Host ("WireClient: {0} ({1})" -f $WireClient, ($(if ($wireStatus) { 'ok' } else { 'skipped' })))
 }
