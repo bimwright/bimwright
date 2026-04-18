@@ -94,10 +94,40 @@ function Invoke-Step1-Plugin {
     }
 }
 
+function Invoke-Step2-DotnetTool {
+    $toolName = 'Bimwright.Rvt.Server'
+    try {
+        $list = & dotnet tool list -g 2>&1 | Out-String
+    } catch {
+        Write-Warning "[step2] 'dotnet' not on PATH — cannot check global tools"
+        $script:skipped += 'step2-dotnet-tool'
+        return
+    }
+
+    if ($list -notmatch [regex]::Escape($toolName.ToLower())) {
+        Write-Host "[step2] $toolName not installed — nothing to remove"
+        $script:skipped += 'step2-dotnet-tool'
+        return
+    }
+
+    try {
+        if ($PSCmdlet.ShouldProcess($toolName, 'dotnet tool uninstall -g')) {
+            & dotnet tool uninstall -g $toolName
+        } else {
+            Write-Host "[step2] (WhatIf) would run: dotnet tool uninstall -g $toolName"
+        }
+        $script:handled += 'step2-dotnet-tool'
+    } catch {
+        Write-Warning ("[step2] uninstall failed: {0}" -f $_.Exception.Message)
+        $script:failed += 'step2-dotnet-tool'
+    }
+}
+
 # --- Main ---
 $planned = @(
     'Step1: plugin + .addin (all detected Revit years via install.ps1 -Uninstall)'
-    # Steps 2-5 added in later tasks
+    'Step2: .NET global tool Bimwright.Rvt.Server'
+    # Steps 3-5 added in later tasks
 )
 
 if (-not (Confirm-Sweep $planned)) {
@@ -106,6 +136,7 @@ if (-not (Confirm-Sweep $planned)) {
 }
 
 Invoke-Step1-Plugin
+Invoke-Step2-DotnetTool
 
 Write-Host ""
 Write-Host "=== uninstall-all.ps1 summary ==="
