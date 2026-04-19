@@ -59,6 +59,11 @@ namespace Bimwright.Rvt.Plugin.Handlers
                                     .OfClass(typeof(FloorType))
                                     .FirstElement() as FloorType;
                             }
+                            if (floorTypeEl == null)
+                            {
+                                tx.RollBack();
+                                return CommandResult.Fail("No floor type loaded in the project.");
+                            }
                             // Floor.Create works on both Revit 2022 and 2024 (replaces deprecated NewFloor).
                             created = Floor.Create(doc, new List<CurveLoop> { curveLoop }, floorTypeEl.Id, level.Id);
                             break;
@@ -70,6 +75,11 @@ namespace Bimwright.Rvt.Plugin.Handlers
                                 ceilingTypeEl = new FilteredElementCollector(doc)
                                     .OfClass(typeof(CeilingType))
                                     .FirstElement() as CeilingType;
+                            }
+                            if (ceilingTypeEl == null)
+                            {
+                                tx.RollBack();
+                                return CommandResult.Fail("No ceiling type loaded in the project.");
                             }
                             created = Ceiling.Create(doc, new List<CurveLoop> { curveLoop }, ceilingTypeEl.Id, level.Id);
                             break;
