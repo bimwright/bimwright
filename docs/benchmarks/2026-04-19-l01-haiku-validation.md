@@ -171,7 +171,7 @@ Tight descriptions saved characters in the tool list but Haiku's response length
 - **n = 1 per cell.** Single run per description version. Haiku sampling is non-deterministic; re-running could shift ±1 query. For a durable verdict, re-run with ≥ 5 samples per version and report mean + variance.
 - **10 queries is a narrow surface.** Real usage covers more tool pairings, more ambiguity, longer multi-step chains. This benchmark is a regression gate, not a model-capability claim.
 - **Handler ground truth was verified by code-reading, not by real Revit round-trip.** `AiElementFilterHandler.cs`, `GetMaterialQuantitiesHandler.cs`, `ColorElementsHandler.cs`, and `Program.cs` were read directly; no live call was sent. Runtime behaviour may differ if Revit locale settings rename built-in categories.
-- **Tool subset = 18 / 36.** Matches the 2026-04-16 benchmark surface (generic tools only, no KEI tools). The 18 other tool descriptions were also rewritten in L-01 but not exercised here.
+- **Tool subset = 18 / 36.** Matches the 2026-04-16 benchmark surface (generic tools only, no internal-tenant-specific tools). The 18 other tool descriptions were also rewritten in L-01 but not exercised here.
 
 ## 10. Reproducibility
 

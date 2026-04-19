@@ -117,7 +117,7 @@ A ≥15% param-accuracy drop vs the last baseline blocks merge until the regress
 Primary verified clients: Claude CLI, Claude Desktop. Other clients (Cursor, Cline, Windsurf, Continue, Zed): no automated tests. If you hit a client-specific bug, open an issue with a minimal repro; we will add a regression test once the behaviour is understood.
 
 ### Naming convention
-Tool names and parameter keys use `snake_case`. We do not maintain aliases for tool names from other Revit-MCP forks (e.g. LuDattilo, Autodesk MCP). If you are migrating from another fork and a specific name mismatch is blocking you, open an issue — we will consider aliases when three or more users request the same one.
+Tool names and parameter keys use `snake_case`. We do not maintain aliases for tool names from other Revit-MCP implementations. If you are migrating from another implementation and a specific name mismatch is blocking you, open an issue — we will consider aliases when three or more users request the same one.
 
 ## Security
 
