@@ -51,14 +51,7 @@ namespace Bimwright.Rvt.Plugin.Handlers
                 tx.Start();
                 try
                 {
-#if REVIT2022
                     var room = doc.Create.NewRoom(level, point);
-#else
-                    // R23+: NewRoom(Level, UV) was removed. Use NewRoom(Phase) + manual placement.
-                    var phase = doc.Phases.get_Item(doc.Phases.Size - 1);
-                    var room = doc.Create.NewRoom(phase);
-                    room.Location.Move(new Autodesk.Revit.DB.XYZ(point.U, point.V, level.Elevation));
-#endif
                     if (!string.IsNullOrEmpty(roomName))
                         room.Name = roomName;
                     if (!string.IsNullOrEmpty(roomNumber))
