@@ -11,7 +11,7 @@ namespace Bimwright.Rvt.Plugin.Handlers
     {
         public string Name => "operate_element";
         public string Description => "Operate on elements: select, hide, unhide, isolate, setColor";
-        public string ParametersSchema => @"{""type"":""object"",""properties"":{""operation"":{""type"":""string"",""enum"":[""move"",""rotate"",""mirror"",""copy"",""color""]},""elementIds"":{""type"":""array"",""items"":{""type"":""integer""}},""r"":{""type"":""integer""},""g"":{""type"":""integer""},""b"":{""type"":""integer""}},""required"":[""operation"",""elementIds""]}";
+        public string ParametersSchema => @"{""type"":""object"",""properties"":{""operation"":{""type"":""string"",""enum"":[""select"",""hide"",""unhide"",""isolate"",""setcolor""]},""elementIds"":{""type"":""array"",""items"":{""type"":""integer""}},""r"":{""type"":""integer""},""g"":{""type"":""integer""},""b"":{""type"":""integer""}},""required"":[""operation"",""elementIds""]}";
 
         public CommandResult Execute(UIApplication app, string paramsJson)
         {
