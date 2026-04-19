@@ -1,8 +1,10 @@
 <!-- mcp-name: io.github.bimwright/rvt-mcp -->
 
 <p align="center">
-  <img src="docs/images/bimwright-logo.jpg" alt="Bimwright — forging the digital craft of the built environment" width="420" />
+  <img src="https://raw.githubusercontent.com/bimwright/.github/master/assets/logos/rvt-mcp.png" alt="rvt-mcp" width="180" />
 </p>
+
+<h1 align="center">rvt-mcp</h1>
 
 <p align="center">
   <a href="https://github.com/bimwright/rvt-mcp/actions/workflows/build.yml"><img src="https://github.com/bimwright/rvt-mcp/actions/workflows/build.yml/badge.svg" alt="build" /></a>
@@ -248,3 +250,10 @@ Gate qua `--enable-toolbaker` (mặc định off). `send_code_to_revit` — esca
 ## License
 
 Apache-2.0. Xem [LICENSE](LICENSE).
+
+---
+
+<p align="center">
+  Một dự án của <a href="https://github.com/bimwright">bimwright</a> —
+  <a href="https://github.com/bimwright"><img src="https://raw.githubusercontent.com/bimwright/.github/master/assets/logos/bimwright-logo.png" alt="bimwright" height="24" align="middle" /></a>
+</p>
