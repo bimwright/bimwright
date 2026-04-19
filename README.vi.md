@@ -18,6 +18,8 @@ Pure C#. Apache-2.0. **28 tool phủ Revit 2022–2027**, transaction-safe và c
 
 Dành cho AI agent và workflow BIM muốn **chỉnh sửa reversible, reviewable** — mỗi thay đổi đều nằm trong undo stack.
 
+> 🤖 **Đang dùng AI agent?** Trỏ nó vào [AGENTS.md](AGENTS.md) — agent sẽ tự cài server, plugin và wire host cho bạn, có preview + approval ở từng bước. (Bạn vẫn cần Revit đã cài sẵn và .NET 8 SDK trên máy.)
+
 Đặc điểm chính:
 
 - **Full span R22–R27.** Một codebase, 6 plugin shell, .NET 4.8 → .NET 10. Đa số đối thủ skip ít nhất 1 năm.

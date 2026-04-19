@@ -20,6 +20,8 @@ Pure C#. Apache-2.0. **28 tools across Revit 2022–2027**, transaction-safe and
 
 Built for AI agents and BIM workflows that want **reversible, reviewable edits** — every change shows up in the undo stack.
 
+> 🤖 **Using an AI agent?** Point it at [AGENTS.md](AGENTS.md) — it will handle the server, plugin, and host wiring for you, with preview + approval at each step. (You still need Revit installed and a .NET 8 SDK on the machine.)
+
 Key traits:
 
 - **Full R22–R27 span.** One codebase, six plugin shells, .NET 4.8 → .NET 10. Most peers skip at least one year.
