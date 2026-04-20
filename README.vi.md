@@ -12,23 +12,31 @@
   <a href="#supported-revit-versions"><img src="https://img.shields.io/badge/.NET-4.8%20%7C%208%20%7C%2010-512BD4" alt=".NET" /></a>
 </p>
 
-> 🇻🇳 **Bản mirror tiếng Việt.** File gốc là [`README.md`](README.md) — khi có xung đột, bản tiếng Anh được ưu tiên. Mirror này có thể lệch vài ngày so với upstream.
+<p align="center">
+  📖 <a href="README.md">English</a> · Tiếng Việt · <a href="README.zh-CN.md">简体中文</a>
+</p>
 
-**Bimwright — Revit MCP server có thể đoán trước được.**
+> 🇻🇳 Bản mirror tiếng Việt. File gốc là [`README.md`](README.md) — khi có xung đột thì bản EN ưu tiên, mirror này có thể lệch vài ngày.
 
-Pure C#. Apache-2.0. **28 tool phủ Revit 2022–2027**, transaction-safe và có thể audit được. Mở rộng qua ToolBaker khi cần thêm.
+---
 
-Dành cho AI agent và workflow BIM muốn **chỉnh sửa reversible, reviewable** — mỗi thay đổi đều nằm trong undo stack.
+Mình làm cái này vì mình chán click rồi.
 
-> 🤖 **Đang dùng AI agent?** Trỏ nó vào [AGENTS.md](AGENTS.md) — agent sẽ tự cài server, plugin và wire host cho bạn, có preview + approval ở từng bước. (Bạn vẫn cần Revit đã cài sẵn và .NET 8 SDK trên máy.)
+Chắc anh/chị cũng dính cảnh này: 5 giờ chiều, BIM Manager ping *"đổi tên tất cả theo chuẩn mới"* — L01 - Hầm, L02 - Thương mại, cứ thế đến hết. Model có mấy ngàn element. Click tay thì xác định. Viết Dynamo script thì nửa ngày. Đúng chỗ ngứa.
 
-Đặc điểm chính:
+**rvt-mcp** là một add-in chạy song song với Revit 2022–2027. Anh/chị nói với Claude (hoặc Cursor, Codex, OpenCode — agent nào cũng được) muốn làm gì, nó gọi 1 trong ~28 tool, Revit chạy trong 1 transaction duy nhất. Không ưng? **Ctrl+Z** — 1 bước, rollback sạch.
 
-- **Full span R22–R27.** Một codebase, 6 plugin shell, .NET 4.8 → .NET 10. Đa số đối thủ skip ít nhất 1 năm.
-- **Pure C# + Apache-2.0.** Không cần Node.js runtime trên máy chạy Revit. License enterprise-safe + dependency graph audit được.
-- **Batching an toàn transaction.** `batch_execute` gói cả list command trong một `TransactionGroup` của Revit — 1 undo, tự rollback khi fail.
-- **Progressive disclosure.** `--toolsets` + `--read-only` kiểm soát những gì model thấy. Model yếu không bị loãng.
-- **ToolBaker tự mở rộng.** Model viết, compile, và register Revit tool mới tại runtime (Debug).
+Không cloud. Không có gì rời khỏi máy của anh/chị. Apache-2.0, pure C#.
+
+> 🤖 **Đang dùng AI agent?** Trỏ nó vào [AGENTS.md](AGENTS.md) — agent tự cài server, plugin, wire host cho anh/chị, mỗi bước đều preview trước khi chạm máy. Vẫn cần Revit đã cài sẵn và .NET 8 SDK trên máy.
+
+Vài thứ mình care:
+
+- **Đủ Revit 2022 đến 2027.** 1 codebase, 6 plugin shell (.NET 4.8 → .NET 10). R22 với R27 ship dựa trên compile-evidence — chỉ runtime-verified 4/4 trên R23–R26 thôi. Stack giống hệt R23 và R26 nên thành thật mà nói mình khá chắc nó chạy, nhưng mình không nói verified cái mình chưa chạy được.
+- **Pure C#, Apache-2.0.** Không cần Node.js trên máy chạy Revit. License enterprise-safe, dependency graph audit được.
+- **Batch atomic.** `batch_execute` gói cả list command trong 1 `TransactionGroup`. 1 undo step. Nếu 1 command trong batch fail thì cả batch rollback — không có chuyện stuck ở trạng thái nửa chừng.
+- **Model yếu không bị loãng.** `--toolsets` + `--read-only` kiểm soát cái model được thấy. Haiku-size không cần biết tới `delete_element` khi anh/chị chỉ hỏi quantity.
+- **ToolBaker, opt-in.** Khi built-in không đủ, model tự viết tool mới bằng C#, compile qua Roslyn, register luôn tại runtime. Mặc định tắt — bật bằng `--enable-toolbaker` nếu anh/chị muốn.
 
 ---
 
@@ -51,7 +59,7 @@ dotnet tool install -g Bimwright.Rvt.Server
 bimwright-rvt --help
 ```
 
-Yêu cầu .NET 8 SDK trên máy chạy MCP client.
+Cần .NET 8 SDK trên máy chạy MCP client.
 
 ### 2. Plugin — Revit add-in
 
@@ -65,7 +73,7 @@ pwsh install.ps1 -Uninstall # gỡ sạch
 
 Script detect các version Revit đã cài qua `HKLM:\SOFTWARE\Autodesk\Revit\` và copy plugin tương ứng vào `%APPDATA%\Autodesk\Revit\Addins\<year>\Bimwright\`.
 
-### 3. Wire vào MCP client của bạn
+### 3. Wire vào MCP client
 
 Thêm 1 entry cho mỗi năm Revit vào config MCP của client (ví dụ `.mcp.json`):
 
@@ -82,7 +90,7 @@ Thêm 1 entry cho mỗi năm Revit vào config MCP của client (ví dụ `.mcp.
 
 Bỏ flag `--target` thì Bimwright auto-detect Revit đang chạy qua discovery file trong `%LOCALAPPDATA%\Bimwright\`.
 
-#### Kịch bản tự động wire cho OpenCode / Codex Desktop
+#### Wire tự động cho OpenCode / Codex Desktop
 
 Thay vì sửa tay `opencode.json` hoặc `~/.codex/config.toml`, chạy:
 
@@ -94,28 +102,28 @@ pwsh install.ps1 -WireClient opencode -WhatIf   # xem trước
 
 Script sẽ:
 
-- Thêm một entry `bimwright-rvt-r<YY>` cho mỗi phiên bản Revit được phát hiện trên máy.
+- Thêm 1 entry `bimwright-rvt-r<YY>` cho mỗi năm Revit detect được trên máy.
 - Giữ nguyên mọi entry không thuộc bimwright đã có trong config (merge tại chỗ).
-- Sao lưu file gốc thành `<file>.bimwright.bak` trước khi ghi.
-- Không làm gì nếu config của host không tồn tại (chưa cài host đó).
+- Backup file gốc thành `<file>.bimwright.bak` trước khi ghi.
+- Không làm gì nếu file config của host không tồn tại (chưa cài host đó).
 
 Người dùng Claude Code: dán đoạn JSON ở trên vào `.mcp.json` của project — script không tự sửa file cấp project.
 
-### Gỡ bỏ toàn bộ
+### Gỡ toàn bộ
 
-Xóa plugin, .NET global tool, entry trong config của host, discovery files và ToolBaker cache trong một lần:
+Xóa plugin, .NET global tool, entry trong config của host, discovery file và ToolBaker cache trong 1 lần:
 
 ```powershell
 pwsh uninstall-all.ps1 -WhatIf    # xem trước những gì sẽ bị xóa
 pwsh uninstall-all.ps1            # xác nhận tương tác rồi thực thi
-pwsh uninstall-all.ps1 -Yes       # bỏ qua prompt
-pwsh uninstall-all.ps1 -KeepLogs  # giữ lại file *.log và *.jsonl
+pwsh uninstall-all.ps1 -Yes       # skip prompt
+pwsh uninstall-all.ps1 -KeepLogs  # giữ file *.log và *.jsonl
 ```
 
 Lưu ý:
 
 - Script gỡ `Bimwright.Rvt.Server` khỏi **toàn bộ máy** (`dotnet tool uninstall -g`), không chỉ thư mục hiện tại.
-- File `.mcp.json` cấp project không được quét — hãy xóa tay các entry `bimwright-rvt-*` trong đó.
+- File `.mcp.json` cấp project không được quét — xóa tay các entry `bimwright-rvt-*` trong đó.
 - `install.ps1 -Uninstall` vẫn chỉ gỡ plugin (tương thích ngược).
 - `-KeepLogs` giữ thư mục `logs\` (nếu có) và các file `*.log` / `*.jsonl` ở cấp gốc trong `%LOCALAPPDATA%\Bimwright\`.
 
@@ -125,11 +133,11 @@ Lưu ý:
 
 | Client | Trạng thái | Ghi chú |
 |--------|-----------|---------|
-| Claude Code CLI | ✅ verified | primary test target |
+| Claude Code CLI | ✅ verified | target test chính |
 | Claude Desktop | ✅ verified | entry trong `.mcp.json` |
-| Cursor | ⏳ pending verification | stdio; dự kiến hoạt động |
-| Cline (VS Code) | ⏳ pending verification | stdio; dự kiến hoạt động |
-| MCP client khác | ⏳ pending | mở issue nếu bạn thử |
+| Cursor | ⏳ pending verification | stdio; dự kiến work |
+| Cline (VS Code) | ⏳ pending verification | stdio; dự kiến work |
+| MCP client khác | ⏳ pending | mở issue nếu anh/chị thử |
 
 Compat matrix rộng hơn nằm trong roadmap v0.2.
 
@@ -140,8 +148,8 @@ Compat matrix rộng hơn nằm trong roadmap v0.2.
 
 1. `dotnet tool install -g Bimwright.Rvt.Server` + `pwsh install.ps1`.
 2. Mở Revit, click nút ribbon **Bimwright → Start MCP**.
-3. Trong MCP client, chạy `tools/list` — bạn sẽ thấy các toolset mặc định (`query`, `create`, `view`, `meta`).
-4. Call `get_current_view_info` — nhận về một DTO như:
+3. Trong MCP client, chạy `tools/list` — sẽ thấy các toolset mặc định (`query`, `create`, `view`, `meta`).
+4. Call `get_current_view_info` — nhận về DTO kiểu:
    ```json
    { "viewName": "Level 1", "viewType": "FloorPlan", "levelName": "Level 1", "scale": 100 }
    ```
@@ -160,7 +168,7 @@ Compat matrix rộng hơn nằm trong roadmap v0.2.
 
 ## Toolsets
 
-**28 tool chia thành 10 nhóm.** 4 nhóm bật mặc định (`query`, `create`, `view`, `meta`); các nhóm còn lại opt-in qua `--toolsets` hoặc config.
+**28 tool chia thành 10 nhóm.** 4 nhóm bật mặc định (`query`, `create`, `view`, `meta`); còn lại opt-in qua `--toolsets` hoặc config.
 
 | Toolset | Tools | Mặc định |
 |---------|-------|----------|
@@ -173,7 +181,7 @@ Compat matrix rộng hơn nằm trong roadmap v0.2.
 | `annotation` | `tag_all_rooms`, `tag_all_walls` | off |
 | `export` | `export_room_data` | off |
 | `mep` | `detect_system_elements` | off |
-| `toolbaker` | `bake_tool`, `list_baked_tools`, `run_baked_tool`, `send_code_to_revit` *(chỉ Debug)* | off |
+| `toolbaker` | `bake_tool`, `list_baked_tools`, `run_baked_tool`, `send_code_to_revit` *(Debug only)* | off |
 
 Bật bằng `--toolsets query,create,modify,meta` hoặc `--toolsets all`. Thêm `--read-only` để strip `create`/`modify`/`delete` bất kể request gì.
 
@@ -190,24 +198,28 @@ Bật bằng `--toolsets query,create,modify,meta` hoặc `--toolsets all`. Thê
 | 2026  | .NET 8 (`net8.0-windows7.0`) | Named Pipe | `ElementId.IntegerValue` bị remove — dùng `RevitCompat.GetId()` |
 | 2027  | .NET 10 (`net10.0-windows7.0`) | Named Pipe | Experimental — .NET 10 vẫn preview |
 
-Compile gate 6/6; runtime verify 4/4 trên R23–R26 (xem `A1` trong commit history). R22 và R27 ship dựa trên compile-evidence vì stack giống R23 và R26 tương ứng.
+Compile gate 6/6; runtime verified 4/4 trên R23–R26 (xem `A1` trong commit history). R22 và R27 ship trên compile-evidence — stack giống hệt R23 và R26, nhưng mình chưa tự chạy được nên không gọi là verified.
 
 ---
 
 ## Security
 
-- **Mặc định bind loopback.** TCP transport chỉ listen trên `127.0.0.1`. Opt in `0.0.0.0` qua `BIMWRIGHT_ALLOW_LAN_BIND=1`.
-- **Handshake có token.** Mỗi connection phải trình token per-session ghi trong `%LOCALAPPDATA%\Bimwright\portR<nn>.txt`.
-- **Validate schema nghiêm ngặt.** Tool call malformed bị reject với envelope error-as-teacher (`error`, `suggestion`, `hint`) trước khi handler chạy.
-- **Mask rò rỉ path.** Exception của handler được sanitize trước khi vào MCP response hoặc log — không để lộ absolute path, UNC share, user-home dir.
+Nói gọn: **model của anh/chị không rời máy.** MCP server chạy local, plugin chạy trong process của Revit, 2 đứa nói chuyện qua localhost. Hết.
 
-Xem [security appendix](docs/roadmap.md#security) để biết full threat model.
+Nói chi tiết, dành cho người duyệt tool này cho tổ chức:
+
+- **Mặc định bind loopback.** TCP transport chỉ listen trên `127.0.0.1`. Nếu thật sự cần LAN thì phải set `BIMWRIGHT_ALLOW_LAN_BIND=1` — mình muốn anh/chị biết chắc mình đang bật nó.
+- **Token handshake per-session.** Mỗi connection phải trình token ghi trong `%LOCALAPPDATA%\Bimwright\portR<nn>.txt`. Attacker cùng user vẫn thắng (đọc được file). Người không có quyền đọc user profile thì bị chặn.
+- **Validate schema trước khi handler chạy.** Tool call malformed nhận envelope error-as-teacher (`error`, `suggestion`, `hint`) thay vì làm sập cái gì.
+- **Mask path trong exception.** Handler throw thì response và log được sanitize — không lộ absolute path, UNC share, user-home.
+
+Full threat model trong [security appendix](docs/roadmap.md#security).
 
 ---
 
 ## Configuration
 
-Ba lớp, lớp sau thắng: **JSON file → env vars → CLI args**.
+3 lớp, lớp sau thắng: **JSON file → env vars → CLI args**.
 
 | Setting | CLI | Env | JSON key |
 |---------|-----|-----|----------|
@@ -221,21 +233,21 @@ JSON file: `%LOCALAPPDATA%\Bimwright\bimwright.config.json`.
 
 ---
 
-## ToolBaker — Cook your own tool with your true dataflow
+## ToolBaker — nướng tool riêng khi built-in không đủ
 
-Các MCP tool generic ép workflow kiểu one-size-fits-all. Task BIM thực tế không như vậy — khi model phải stitch 10+ primitive tool để làm *đúng* việc anh/chị cần, mỗi session đều tốn thời gian và token như nhau. Đó là cái ngứa. ToolBaker là cái gãi.
+Tool generic thì generic. Task BIM thực của anh/chị không như vậy — có quy ước đặt tên riêng, có bước QA riêng, có pipeline export riêng. Mỗi session, agent phải stitch 8–10 primitive call để làm đúng cái workflow đó, và anh/chị đốt token mỗi lần. Mình bực đủ để xây đường thoát.
 
-Anh/chị mô tả workflow một lần. Model viết C# dựa trên Revit API, `bake_tool` compile qua Roslyn vào `AssemblyLoadContext` cô lập, register thành first-class MCP tool. Session sau, workflow đó chỉ còn **1 call** — không phải re-plan, không phải re-invent glue code, không tốn token.
+Anh/chị mô tả workflow 1 lần bằng tiếng người. Model viết 1 handler C#, `bake_tool` compile qua Roslyn vào `AssemblyLoadContext` cô lập, SQLite persist. Session sau — workflow đó chỉ còn 1 call.
 
-**Cách hoạt động:**
+Walkthrough:
 
-1. Mô tả dataflow thực của anh/chị bằng ngôn ngữ tự nhiên (ví dụ *"schedule tất cả cửa theo fire rating, tag các fail, export ra CSV"*).
+1. Mô tả dataflow thực, ví dụ *"schedule tất cả cửa theo fire rating, tag cái fail, export ra CSV"*.
 2. Model generate handler theo contract `IRevitCommand`.
 3. `bake_tool` compile qua Roslyn, link với Revit API live, load vào sandboxed assembly context.
-4. SQLite persist bake. Auto-register mỗi lần Bimwright start.
+4. SQLite persist. Auto-register mỗi session sau.
 5. Call như tool built-in — cùng schema validation, cùng transaction safety.
 
-Gate qua `--enable-toolbaker` (mặc định off). `send_code_to_revit` — escape hatch không sandbox — chỉ có trong Debug build.
+Gate qua `--enable-toolbaker` (mặc định off). `send_code_to_revit` — escape hatch không sandbox — chỉ có trong Debug build, nên release binary không thể execute C# bừa được.
 
 ---
 
@@ -250,6 +262,8 @@ Gate qua `--enable-toolbaker` (mặc định off). `send_code_to_revit` — esca
 ## License
 
 Apache-2.0. Xem [LICENSE](LICENSE).
+
+Nếu anh/chị dùng vào việc thật thì star repo giùm — để người khác cũng tìm thấy được.
 
 ---
 

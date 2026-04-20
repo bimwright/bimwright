@@ -13,24 +13,28 @@
 </p>
 
 <p align="center">
-  📖 <a href="README.vi.md">Đọc bằng tiếng Việt</a>
+  📖 English · <a href="README.vi.md">Tiếng Việt</a> · <a href="README.zh-CN.md">简体中文</a>
 </p>
 
-**Bimwright — the predictable Revit MCP server.**
+---
 
-Pure C#. Apache-2.0. **28 tools across Revit 2022–2027**, transaction-safe and auditable. Extensible via ToolBaker when you need more.
+I built this because I got tired of clicking.
 
-Built for AI agents and BIM workflows that want **reversible, reviewable edits** — every change shows up in the undo stack.
+You know the scene: 5 PM, your BIM Manager messages *"rename everything to the new standard"* — L01 - Basement, L02 - Commercial, on and on. The model has a few thousand elements. Doing it by hand is out. Writing a Dynamo script takes half a day. That's the itch.
 
-> 🤖 **Using an AI agent?** Point it at [AGENTS.md](AGENTS.md) — it will handle the server, plugin, and host wiring for you, with preview + approval at each step. (You still need Revit installed and a .NET 8 SDK on the machine.)
+**rvt-mcp** is an add-in that sits next to Revit 2022–2027. You tell Claude (or Cursor, Codex, OpenCode — whatever agent you use) what you want done, it calls one of ~28 tools, and Revit runs the thing inside a single transaction. Not happy? **Ctrl+Z** — one step, everything rolls back.
 
-Key traits:
+No cloud. Nothing leaves your machine. Apache-2.0, pure C#.
 
-- **Full R22–R27 span.** One codebase, six plugin shells, .NET 4.8 → .NET 10. Most peers skip at least one year.
-- **Pure C# + Apache-2.0.** No Node.js runtime beside Revit. Enterprise-safe license + audit-ready dependency graph.
-- **Transaction-safe batching.** `batch_execute` wraps a command list in one Revit `TransactionGroup` — one undo, atomic rollback on failure.
-- **Progressive disclosure.** `--toolsets` + `--read-only` gate what the model sees. Weak models stay sharp.
-- **ToolBaker self-extension.** The model writes, compiles, and registers new Revit tools at runtime (Debug).
+> 🤖 **Using an AI agent?** Point it at [AGENTS.md](AGENTS.md) — it'll install the server, the plugin, and wire your MCP client, previewing each step before it touches anything. You still need Revit and .NET 8 SDK on the machine.
+
+A few things I care about:
+
+- **Every Revit year from 2022 to 2027.** One codebase, six plugin shells (.NET 4.8 → .NET 10). R22 and R27 ship on compile-evidence — runtime-verified on R23–R26 only. The stack is identical, so honestly I'd be surprised if they broke, but I'm not going to claim what I haven't tested.
+- **Pure C#, Apache-2.0.** No Node.js on the Revit machine. License is enterprise-safe, dependency graph audits cleanly.
+- **Atomic batches.** `batch_execute` wraps a whole command list in one `TransactionGroup`. One undo step. If any command in the batch fails, the whole group rolls back — you never end up with a half-applied edit.
+- **Weak models don't drown.** `--toolsets` + `--read-only` gate what the agent can see. A Haiku-sized model doesn't need to know about `delete_element` when you asked it to pull quantities.
+- **ToolBaker, opt-in.** When the built-ins aren't enough, the model can write a new tool in C#, compile it through Roslyn, and register it live. Off by default — turn it on with `--enable-toolbaker` if you want it.
 
 ---
 
@@ -192,18 +196,22 @@ Enable with `--toolsets query,create,modify,meta` or `--toolsets all`. Add `--re
 | 2026  | .NET 8 (`net8.0-windows7.0`) | Named Pipe | `ElementId.IntegerValue` removed — uses `RevitCompat.GetId()` |
 | 2027  | .NET 10 (`net10.0-windows7.0`) | Named Pipe | Experimental — .NET 10 still preview |
 
-Compile gate is 6/6; runtime verified 4/4 on R23–R26 (see `A1` in the commit history). R22 and R27 ship on compile-evidence because the stack is identical to R23 and R26 respectively.
+Compile gate is 6/6; runtime verified 4/4 on R23–R26 (see `A1` in the commit history). R22 and R27 ship on compile-evidence — the stack is identical to R23 and R26 respectively, but I haven't run them myself so I'm not calling them verified.
 
 ---
 
 ## Security
 
-- **Default loopback bind.** TCP transport listens on `127.0.0.1` only. Opt in to `0.0.0.0` with `BIMWRIGHT_ALLOW_LAN_BIND=1`.
-- **Token-gated handshake.** Every connection must present a per-session token written only to `%LOCALAPPDATA%\Bimwright\portR<nn>.txt`.
-- **Strict schema validation.** Malformed tool calls are rejected with an error-as-teacher envelope (`error`, `suggestion`, `hint`) before any handler runs.
-- **Path-leak mask.** Handler exceptions are sanitized before they reach the MCP response or logs — no absolute paths, UNC shares, or user-home dirs leak out.
+Short version: **your model stays on your machine.** The MCP server runs locally, the plugin runs inside your Revit process, they talk over localhost. That's the whole picture.
 
-See [the security appendix](docs/roadmap.md#security) for the full threat model.
+Longer version, for the people reviewing this for their org:
+
+- **Loopback bind by default.** TCP transport listens on `127.0.0.1` only. If you actually need LAN access, you have to set `BIMWRIGHT_ALLOW_LAN_BIND=1` — I'd rather you knew you were turning it on.
+- **Per-session token handshake.** Every connection has to present a token written only to `%LOCALAPPDATA%\Bimwright\portR<nn>.txt`. Same-user attacker still wins (they can read the file). Anyone without read access to your user profile is out.
+- **Schema validation before handlers run.** Malformed tool calls get an error-as-teacher envelope (`error`, `suggestion`, `hint`) instead of crashing something.
+- **Path masking on exceptions.** If a handler throws, the MCP response and logs get sanitized — no absolute paths, no UNC shares, no user-home dirs.
+
+Full threat model in [the security appendix](docs/roadmap.md#security).
 
 ---
 
@@ -223,21 +231,21 @@ JSON file path: `%LOCALAPPDATA%\Bimwright\bimwright.config.json`.
 
 ---
 
-## ToolBaker — Cook your own tool with your true dataflow
+## ToolBaker — cook your own tool when the built-ins aren't enough
 
-Generic MCP tools force one-size-fits-all workflows. Real BIM tasks aren't — when the model stitches 10+ primitive tools together to do your *actual* job, you pay in time and tokens every single session. That was the itch. ToolBaker is the scratch.
+Generic tools are generic. Your actual BIM work isn't — you've got your own naming conventions, your own QA pass, your own export pipeline. Every session, the agent stitches 8–10 primitive calls to do the same thing, and you pay tokens every time. That annoyed me enough to build a way out.
 
-You describe the workflow once. The model writes C# against the Revit API, `bake_tool` compiles it through Roslyn into an isolated `AssemblyLoadContext`, and registers it as a first-class MCP tool. Next session, your workflow is a **single call** — no re-planning, no re-invented glue code, no token burn.
+You describe the workflow once in plain language. The model writes a C# handler, `bake_tool` compiles it through Roslyn into an isolated `AssemblyLoadContext`, SQLite persists the bake. Next session — your workflow is one call.
 
-**How it works:**
+Walkthrough:
 
-1. Describe your real dataflow in plain language (e.g. *"schedule every door by fire rating, tag failures, export to CSV"*).
-2. The model generates a handler matching the `IRevitCommand` contract.
+1. Describe your real dataflow, e.g. *"schedule every door by fire rating, tag the failures, export to CSV"*.
+2. Model writes a handler matching the `IRevitCommand` contract.
 3. `bake_tool` compiles via Roslyn, links against the live Revit API, loads into a sandboxed assembly context.
-4. SQLite persists the bake. Auto-registered on every future Bimwright session.
+4. SQLite persists. Auto-registers on every future session.
 5. Call it like any built-in — same schema validation, same transaction safety.
 
-Gated behind `--enable-toolbaker` (off by default). `send_code_to_revit` — the unsandboxed escape hatch — is Debug-build only.
+Gated behind `--enable-toolbaker` (off by default). `send_code_to_revit` — the unsandboxed escape hatch — is Debug-build only, so a release binary physically can't execute arbitrary C#.
 
 ---
 
@@ -252,6 +260,8 @@ Gated behind `--enable-toolbaker` (off by default). `send_code_to_revit` — the
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE).
+
+If you use it for something real, give the repo a star — helps others find it.
 
 ---
 
