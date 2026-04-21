@@ -19,6 +19,7 @@ namespace Bimwright.Rvt.Plugin.ToolBaker
         private readonly string _dir;
         private readonly string _registryPath;
         private readonly Dictionary<string, BakedToolMeta> _tools = new Dictionary<string, BakedToolMeta>();
+        private readonly object _lock = new object();
 
         public BakedToolRegistry()
         {
@@ -34,12 +35,12 @@ namespace Bimwright.Rvt.Plugin.ToolBaker
 
         public void Save(BakedToolMeta meta, string sourceCode)
         {
-            _tools[meta.Name] = meta;
-            // Save source
-            File.WriteAllText(Path.Combine(_dir, meta.Name + ".cs"), sourceCode);
-            // Save registry
-            var json = JsonConvert.SerializeObject(_tools.Values, Formatting.Indented);
-            File.WriteAllText(_registryPath, json);
+            lock (_lock)
+            {
+                _tools[meta.Name] = meta;
+                File.WriteAllText(Path.Combine(_dir, meta.Name + ".cs"), sourceCode);
+                WriteRegistryAtomic();
+            }
         }
 
         public string GetSource(string name)
@@ -50,30 +51,55 @@ namespace Bimwright.Rvt.Plugin.ToolBaker
 
         public BakedToolMeta GetMeta(string name)
         {
-            _tools.TryGetValue(name, out var meta);
-            return meta;
+            lock (_lock)
+            {
+                _tools.TryGetValue(name, out var meta);
+                return meta;
+            }
         }
 
-        public IEnumerable<BakedToolMeta> GetAll() => _tools.Values;
+        public IEnumerable<BakedToolMeta> GetAll()
+        {
+            lock (_lock)
+            {
+                return new List<BakedToolMeta>(_tools.Values);
+            }
+        }
 
         public void IncrementCallCount(string name)
         {
-            if (_tools.TryGetValue(name, out var meta))
+            lock (_lock)
             {
-                meta.CallCount++;
-                var json = JsonConvert.SerializeObject(_tools.Values, Formatting.Indented);
-                File.WriteAllText(_registryPath, json);
+                if (_tools.TryGetValue(name, out var meta))
+                {
+                    meta.CallCount++;
+                    WriteRegistryAtomic();
+                }
             }
         }
 
         public bool Remove(string name)
         {
-            if (!_tools.Remove(name)) return false;
-            var csPath = Path.Combine(_dir, name + ".cs");
-            if (File.Exists(csPath)) File.Delete(csPath);
+            lock (_lock)
+            {
+                if (!_tools.Remove(name)) return false;
+                var csPath = Path.Combine(_dir, name + ".cs");
+                if (File.Exists(csPath)) File.Delete(csPath);
+                WriteRegistryAtomic();
+                return true;
+            }
+        }
+
+        // Caller must hold _lock.
+        private void WriteRegistryAtomic()
+        {
             var json = JsonConvert.SerializeObject(_tools.Values, Formatting.Indented);
-            File.WriteAllText(_registryPath, json);
-            return true;
+            var tmp = _registryPath + ".tmp";
+            File.WriteAllText(tmp, json);
+            if (File.Exists(_registryPath))
+                File.Replace(tmp, _registryPath, null);
+            else
+                File.Move(tmp, _registryPath);
         }
 
         private void Load()
@@ -87,7 +113,20 @@ namespace Bimwright.Rvt.Plugin.ToolBaker
                 foreach (var meta in list)
                     _tools[meta.Name] = meta;
             }
-            catch { }
+            catch (Exception ex)
+            {
+                // Quarantine corrupt file + record error so silent-disappear is diagnosable.
+                try
+                {
+                    var stamp = DateTime.UtcNow.ToString("yyyyMMddHHmmss");
+                    var quarantine = _registryPath + ".corrupt-" + stamp;
+                    File.Copy(_registryPath, quarantine, overwrite: true);
+                    var errLog = Path.Combine(_dir, "registry-load.error");
+                    File.AppendAllText(errLog,
+                        $"{DateTime.UtcNow:o} {ex.GetType().Name}: {ex.Message}\nQuarantined: {quarantine}\n");
+                }
+                catch { }
+            }
         }
     }
 }
