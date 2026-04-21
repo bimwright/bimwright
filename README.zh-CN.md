@@ -24,7 +24,7 @@
 
 你肯定遇到过这种场景：下午 5 点，BIM 经理发消息过来 *"按新标准把所有东西重命名一下"* — L01 - 地下室、L02 - 商业层、一路下去。模型里几千个 element。手动点不现实。写个 Dynamo 脚本又要花半天。这就是那个痒点。
 
-**rvt-mcp** 是一个和 Revit 2022–2027 一起跑的 add-in。你告诉 Claude（或者 Cursor、Codex、OpenCode — 哪个 agent 都行）你要做什么，它调用 ~28 个 tool 里的某一个，Revit 在一个 transaction 里把事情做完。不满意？**Ctrl+Z** — 一步，全部回滚。
+**rvt-mcp** 是一个和 Revit 2022–2027 一起跑的 add-in。你告诉 Claude（或者 Cursor、Codex、OpenCode — 哪个 agent 都行）你要做什么，它调用 29 个 tool 里的某一个，Revit 在一个 transaction 里把事情做完。不满意？**Ctrl+Z** — 一步，全部回滚。
 
 不上云，什么都不离开你的机器。Apache-2.0，纯 C#。
 
@@ -61,14 +61,14 @@ rvt-mcp/
 │   │   ├── Handlers/             # 每个 tool 一个文件（create_grid, send_code, …）
 │   │   ├── Commands/             # Revit ribbon 命令
 │   │   ├── ToolBaker/            # 自演化引擎（bake_tool, run_baked_tool）
-│   │   ├── Transport/            # TCP (R22–R26) + Named Pipe (R27) 抽象
+│   │   ├── Transport/            # TCP (R22–R24) + Named Pipe (R25–R27) 抽象
 │   │   ├── Infrastructure/       # CommandDispatcher、ExternalEvent marshalling
 │   │   └── Security/             # Auth token、密钥掩码
 │   ├── plugin-r22/               # Revit 2022 shell — .NET 4.8，TCP
 │   ├── plugin-r23/               # Revit 2023 shell — .NET 4.8，TCP
 │   ├── plugin-r24/               # Revit 2024 shell — .NET 4.8，TCP
-│   ├── plugin-r25/               # Revit 2025 shell — .NET 8，TCP
-│   ├── plugin-r26/               # Revit 2026 shell — .NET 8，TCP
+│   ├── plugin-r25/               # Revit 2025 shell — .NET 8，Named Pipe
+│   ├── plugin-r26/               # Revit 2026 shell — .NET 8，Named Pipe
 │   └── plugin-r27/               # Revit 2027 shell — .NET 10，Named Pipe
 ├── tests/                        # Golden snapshot + Haiku benchmark + policy 测试
 ├── benchmarks/                   # 弱模型（Haiku）准确率 harness
@@ -202,7 +202,7 @@ pwsh uninstall-all.ps1 -KeepLogs  # 保留 *.log 和 *.jsonl
 
 ## Toolsets
 
-**28 个 tool 分成 10 组。** 4 组默认开（`query`、`create`、`view`、`meta`），其他通过 `--toolsets` 或 config opt-in。
+**29 个 tool 分成 10 个 toolset。** 4 个 toolset 默认开（`query`、`create`、`view`、`meta`），其他通过 `--toolsets` 或 config opt-in。
 
 | Toolset | Tools | 默认 |
 |---------|-------|------|
@@ -218,6 +218,40 @@ pwsh uninstall-all.ps1 -KeepLogs  # 保留 *.log 和 *.jsonl
 | `toolbaker` | `bake_tool`, `list_baked_tools`, `run_baked_tool`, `send_code_to_revit` *(仅 Debug)* | off |
 
 用 `--toolsets query,create,modify,meta` 或 `--toolsets all` 打开。加 `--read-only` 会不管你 request 了什么都把 `create`/`modify`/`delete` 剥掉。
+
+### 完整工具列表
+
+| Toolset | Tool | 说明 |
+|---|---|---|
+| `query` | `get_current_view_info` | 当前 view 的 metadata（类型、level、scale、detail level）。 |
+| `query` | `get_selected_elements` | 当前选中的 element，带 id、name、category、type。 |
+| `query` | `get_available_family_types` | project 里的 family type，按 category 过滤。 |
+| `query` | `ai_element_filter` | 按 category + parameter + operator 过滤（值用 mm）。 |
+| `query` | `analyze_model_statistics` | 按 category 分组的 element 计数。 |
+| `query` | `get_material_quantities` | 某个 category 的 area (m²) 和 volume (m³)。 |
+| `create` | `create_line_based_element` | Wall 或其他 line-based element。 |
+| `create` | `create_point_based_element` | Door、window、furniture 或其他 point element。 |
+| `create` | `create_surface_based_element` | 从 polyline 建 floor 或 ceiling。 |
+| `create` | `create_level` | 在指定 elevation（mm）建 level。 |
+| `create` | `create_grid` | 两点之间建一条 grid line（mm）。 |
+| `create` | `create_room` | 在某个点建 room，被 wall 围起来。 |
+| `modify` | `operate_element` | 对 ID 列表做 select、hide、unhide、isolate、set-color。 |
+| `modify` | `color_elements` | 按 parameter 值给某个 category 上色（auto palette）。 |
+| `delete` | `delete_element` | 按 ID 列表删除（destructive；MCP 侧没法 undo）。 |
+| `view` | `create_view` | 平面图或 3D view。 |
+| `view` | `place_view_on_sheet` | 把 view 放到新的或已有的 sheet 上。 |
+| `view` | `analyze_sheet_layout` | 标题栏 + viewport 位置/比例（mm）。 |
+| `export` | `export_room_data` | 全部 room：name、number、area、perimeter、level、volume。 |
+| `annotation` | `tag_all_walls` | 在 midpoint 给墙打 wall-type tag（跳过已有 tag 的）。 |
+| `annotation` | `tag_all_rooms` | 在 location point 打 room tag（跳过已有 tag 的）。 |
+| `mep` | `detect_system_elements` | 从一个 seed 沿 connector 遍历，返回 system 成员。 |
+| `toolbaker` | `send_code_to_revit` | 在 Revit 里跑临时 C# 代码（最后手段；仅 Debug build）。 |
+| `toolbaker` | `bake_tool` | 从 C# 源码注册一个持久 tool。 |
+| `toolbaker` | `list_baked_tools` | 列出已注册的 baked tool。 |
+| `toolbaker` | `run_baked_tool` | 按名字调用 baked tool。 |
+| `meta` | `show_message` | 在 Revit 里弹 TaskDialog — 测连接、通知用户。 |
+| `meta` | `batch_execute` | 在一个 TransactionGroup 里原子执行 N 个命令（一次 undo）。 |
+| `meta` | `analyze_usage_patterns` | SQLite stats：tool 调用次数、session、error（最近 N 天）。 |
 
 ---
 

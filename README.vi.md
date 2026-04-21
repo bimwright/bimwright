@@ -24,7 +24,7 @@ Mình làm cái này vì mình chán click rồi.
 
 Chắc anh/chị cũng dính cảnh này: 5 giờ chiều, BIM Manager ping *"đổi tên tất cả theo chuẩn mới"* — L01 - Hầm, L02 - Thương mại, cứ thế đến hết. Model có mấy ngàn element. Click tay thì xác định. Viết Dynamo script thì nửa ngày. Đúng chỗ ngứa.
 
-**rvt-mcp** là một add-in chạy song song với Revit 2022–2027. Anh/chị nói với Claude (hoặc Cursor, Codex, OpenCode — agent nào cũng được) muốn làm gì, nó gọi 1 trong ~28 tool, Revit chạy trong 1 transaction duy nhất. Không ưng? **Ctrl+Z** — 1 bước, rollback sạch.
+**rvt-mcp** là một add-in chạy song song với Revit 2022–2027. Anh/chị nói với Claude (hoặc Cursor, Codex, OpenCode — agent nào cũng được) muốn làm gì, nó gọi 1 trong 29 tool, Revit chạy trong 1 transaction duy nhất. Không ưng? **Ctrl+Z** — 1 bước, rollback sạch.
 
 Không cloud. Không có gì rời khỏi máy của anh/chị. Apache-2.0, pure C#.
 
@@ -61,14 +61,14 @@ rvt-mcp/
 │   │   ├── Handlers/             # Mỗi tool = 1 file (create_grid, send_code, …)
 │   │   ├── Commands/             # Ribbon command trong Revit
 │   │   ├── ToolBaker/            # Self-evolution engine (bake_tool, run_baked_tool)
-│   │   ├── Transport/            # TCP (R22–R26) + Named Pipe (R27)
+│   │   ├── Transport/            # TCP (R22–R24) + Named Pipe (R25–R27)
 │   │   ├── Infrastructure/       # CommandDispatcher, ExternalEvent marshalling
 │   │   └── Security/             # Auth token, secret masking
 │   ├── plugin-r22/               # Revit 2022 shell — .NET 4.8, TCP
 │   ├── plugin-r23/               # Revit 2023 shell — .NET 4.8, TCP
 │   ├── plugin-r24/               # Revit 2024 shell — .NET 4.8, TCP
-│   ├── plugin-r25/               # Revit 2025 shell — .NET 8, TCP
-│   ├── plugin-r26/               # Revit 2026 shell — .NET 8, TCP
+│   ├── plugin-r25/               # Revit 2025 shell — .NET 8, Named Pipe
+│   ├── plugin-r26/               # Revit 2026 shell — .NET 8, Named Pipe
 │   └── plugin-r27/               # Revit 2027 shell — .NET 10, Named Pipe
 ├── tests/                        # Golden snapshot + Haiku benchmark + policy test
 ├── benchmarks/                   # Harness đo accuracy của model yếu (Haiku)
@@ -202,7 +202,7 @@ Compat matrix rộng hơn nằm trong roadmap v0.2.
 
 ## Toolsets
 
-**28 tool chia thành 10 nhóm.** 4 nhóm bật mặc định (`query`, `create`, `view`, `meta`); còn lại opt-in qua `--toolsets` hoặc config.
+**29 tool chia thành 10 toolset.** 4 toolset bật mặc định (`query`, `create`, `view`, `meta`); còn lại opt-in qua `--toolsets` hoặc config.
 
 | Toolset | Tools | Mặc định |
 |---------|-------|----------|
@@ -218,6 +218,40 @@ Compat matrix rộng hơn nằm trong roadmap v0.2.
 | `toolbaker` | `bake_tool`, `list_baked_tools`, `run_baked_tool`, `send_code_to_revit` *(Debug only)* | off |
 
 Bật bằng `--toolsets query,create,modify,meta` hoặc `--toolsets all`. Thêm `--read-only` để strip `create`/`modify`/`delete` bất kể request gì.
+
+### Danh sách tool đầy đủ
+
+| Toolset | Tool | Mô tả |
+|---|---|---|
+| `query` | `get_current_view_info` | Metadata view active (type, level, scale, detail level). |
+| `query` | `get_selected_elements` | Element đang chọn với id, tên, category, type. |
+| `query` | `get_available_family_types` | Family type trong project, filter được theo category. |
+| `query` | `ai_element_filter` | Filter theo category + parameter + operator (giá trị mm). |
+| `query` | `analyze_model_statistics` | Đếm element group theo category. |
+| `query` | `get_material_quantities` | Area (m²) + volume (m³) cho 1 category. |
+| `create` | `create_line_based_element` | Wall hoặc line-based element khác. |
+| `create` | `create_point_based_element` | Door, window, furniture hay point element khác. |
+| `create` | `create_surface_based_element` | Floor hoặc ceiling từ polyline. |
+| `create` | `create_level` | Level tại elevation (mm). |
+| `create` | `create_grid` | Grid line giữa 2 điểm (mm). |
+| `create` | `create_room` | Room tại 1 điểm, bound bởi wall. |
+| `modify` | `operate_element` | Select, hide, unhide, isolate, set-color trên danh sách ID. |
+| `modify` | `color_elements` | Color-code 1 category theo parameter value (auto palette). |
+| `delete` | `delete_element` | Xóa theo list ID (destructive; không undo qua MCP được). |
+| `view` | `create_view` | Floor plan hoặc 3D view. |
+| `view` | `place_view_on_sheet` | Đặt view lên sheet (mới hoặc có sẵn). |
+| `view` | `analyze_sheet_layout` | Title block + vị trí/scale của viewport (mm). |
+| `export` | `export_room_data` | Toàn bộ room: name, number, area, perimeter, level, volume. |
+| `annotation` | `tag_all_walls` | Tag wall-type tại midpoint (bỏ qua wall đã tag). |
+| `annotation` | `tag_all_rooms` | Room tag tại location point (bỏ qua room đã tag). |
+| `mep` | `detect_system_elements` | Lần theo connector từ 1 seed, trả về member của system. |
+| `toolbaker` | `send_code_to_revit` | Chạy C# body ad-hoc trong Revit (last resort; Debug build only). |
+| `toolbaker` | `bake_tool` | Register 1 tool bền vững từ C# source. |
+| `toolbaker` | `list_baked_tools` | List tool đã bake. |
+| `toolbaker` | `run_baked_tool` | Gọi tool đã bake theo tên. |
+| `meta` | `show_message` | TaskDialog trong Revit — test connection, notify user. |
+| `meta` | `batch_execute` | Chạy N command atomic trong 1 TransactionGroup (1 undo). |
+| `meta` | `analyze_usage_patterns` | Stats từ SQLite: tool calls, session, error (N ngày gần nhất). |
 
 ---
 

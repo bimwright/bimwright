@@ -22,7 +22,7 @@ I built this because I got tired of clicking.
 
 You know the scene: 5 PM, your BIM Manager messages *"rename everything to the new standard"* — L01 - Basement, L02 - Commercial, on and on. The model has a few thousand elements. Doing it by hand is out. Writing a Dynamo script takes half a day. That's the itch.
 
-**rvt-mcp** is an add-in that sits next to Revit 2022–2027. You tell Claude (or Cursor, Codex, OpenCode — whatever agent you use) what you want done, it calls one of ~28 tools, and Revit runs the thing inside a single transaction. Not happy? **Ctrl+Z** — one step, everything rolls back.
+**rvt-mcp** is an add-in that sits next to Revit 2022–2027. You tell Claude (or Cursor, Codex, OpenCode — whatever agent you use) what you want done, it calls one of 29 tools, and Revit runs the thing inside a single transaction. Not happy? **Ctrl+Z** — one step, everything rolls back.
 
 No cloud. Nothing leaves your machine. Apache-2.0, pure C#.
 
@@ -59,14 +59,14 @@ rvt-mcp/
 │   │   ├── Handlers/             # One file per tool (create_grid, send_code, …)
 │   │   ├── Commands/             # Revit ribbon commands
 │   │   ├── ToolBaker/            # Self-evolution engine (bake_tool, run_baked_tool)
-│   │   ├── Transport/            # TCP (R22–R26) + Named Pipe (R27) abstraction
+│   │   ├── Transport/            # TCP (R22–R24) + Named Pipe (R25–R27) abstraction
 │   │   ├── Infrastructure/       # CommandDispatcher, ExternalEvent marshalling
 │   │   └── Security/             # Auth token, secret masking
 │   ├── plugin-r22/               # Revit 2022 shell — .NET 4.8, TCP
 │   ├── plugin-r23/               # Revit 2023 shell — .NET 4.8, TCP
 │   ├── plugin-r24/               # Revit 2024 shell — .NET 4.8, TCP
-│   ├── plugin-r25/               # Revit 2025 shell — .NET 8, TCP
-│   ├── plugin-r26/               # Revit 2026 shell — .NET 8, TCP
+│   ├── plugin-r25/               # Revit 2025 shell — .NET 8, Named Pipe
+│   ├── plugin-r26/               # Revit 2026 shell — .NET 8, Named Pipe
 │   └── plugin-r27/               # Revit 2027 shell — .NET 10, Named Pipe
 ├── tests/                        # Golden snapshot + Haiku benchmark + policy tests
 ├── benchmarks/                   # Weak-model (Haiku) accuracy harness
@@ -200,7 +200,7 @@ Broader client-compat matrix is on the v0.2 roadmap.
 
 ## Toolsets
 
-**28 tools across 10 groups.** Four groups are on by default (`query`, `create`, `view`, `meta`); the rest opt in via `--toolsets` or config.
+**29 tools across 10 toolsets.** Four toolsets are on by default (`query`, `create`, `view`, `meta`); the rest opt in via `--toolsets` or config.
 
 | Toolset | Tools | Default |
 |---------|-------|---------|
@@ -216,6 +216,40 @@ Broader client-compat matrix is on the v0.2 roadmap.
 | `toolbaker` | `bake_tool`, `list_baked_tools`, `run_baked_tool`, `send_code_to_revit` *(Debug only)* | off |
 
 Enable with `--toolsets query,create,modify,meta` or `--toolsets all`. Add `--read-only` to strip `create`/`modify`/`delete` regardless of what you requested.
+
+### All tools
+
+| Toolset | Tool | Description |
+|---|---|---|
+| `query` | `get_current_view_info` | Active view metadata (type, level, scale, detail level). |
+| `query` | `get_selected_elements` | Currently selected elements with id, name, category, type. |
+| `query` | `get_available_family_types` | Family types in the project, filterable by category. |
+| `query` | `ai_element_filter` | Filter by category + parameter + operator (values in mm). |
+| `query` | `analyze_model_statistics` | Element counts grouped by category. |
+| `query` | `get_material_quantities` | Area (m²) and volume (m³) for a category. |
+| `create` | `create_line_based_element` | Wall or other line-based element. |
+| `create` | `create_point_based_element` | Door, window, furniture or other point element. |
+| `create` | `create_surface_based_element` | Floor or ceiling from a polyline. |
+| `create` | `create_level` | Level at elevation (mm). |
+| `create` | `create_grid` | Grid line between two points (mm). |
+| `create` | `create_room` | Room at a point, bound by walls. |
+| `modify` | `operate_element` | Select, hide, unhide, isolate, or set-color on IDs. |
+| `modify` | `color_elements` | Color-code a category by parameter value (auto palette). |
+| `delete` | `delete_element` | Delete by ID list (destructive; not MCP-undoable). |
+| `view` | `create_view` | Floor plan or 3D view. |
+| `view` | `place_view_on_sheet` | Drop a view onto a new or existing sheet. |
+| `view` | `analyze_sheet_layout` | Title block + viewport positions and scales (mm). |
+| `export` | `export_room_data` | All rooms: name, number, area, perimeter, level, volume. |
+| `annotation` | `tag_all_walls` | Wall-type tags at midpoint (skips already-tagged). |
+| `annotation` | `tag_all_rooms` | Room tags at location point (skips already-tagged). |
+| `mep` | `detect_system_elements` | Traverse connectors from a seed; return system members. |
+| `toolbaker` | `send_code_to_revit` | Run ad-hoc C# body inside Revit (last resort; Debug builds only). |
+| `toolbaker` | `bake_tool` | Register a persistent tool from C# source. |
+| `toolbaker` | `list_baked_tools` | List registered baked tools. |
+| `toolbaker` | `run_baked_tool` | Invoke a baked tool by name. |
+| `meta` | `show_message` | TaskDialog inside Revit — connection test or user notification. |
+| `meta` | `batch_execute` | Run N commands atomically in one TransactionGroup (single undo). |
+| `meta` | `analyze_usage_patterns` | SQLite stats: tool call counts, sessions, errors (last N days). |
 
 ---
 
