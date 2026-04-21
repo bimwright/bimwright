@@ -50,6 +50,40 @@ MCP client (Claude Code, ...) ⇄ stdio ⇄ Bimwright.Rvt.Server (.NET 8) ⇄ TC
 
 ---
 
+## 项目结构
+
+```
+rvt-mcp/
+├── src/
+│   ├── Bimwright.Rvt.sln         # 解决方案（server + 6 个 plugin shell）
+│   ├── server/                   # Bimwright.Rvt.Server — .NET 8 global tool，stdio MCP
+│   ├── shared/                   # 所有 plugin shell 共用的源码 glob
+│   │   ├── Handlers/             # 每个 tool 一个文件（create_grid, send_code, …）
+│   │   ├── Commands/             # Revit ribbon 命令
+│   │   ├── ToolBaker/            # 自演化引擎（bake_tool, run_baked_tool）
+│   │   ├── Transport/            # TCP (R22–R26) + Named Pipe (R27) 抽象
+│   │   ├── Infrastructure/       # CommandDispatcher、ExternalEvent marshalling
+│   │   └── Security/             # Auth token、密钥掩码
+│   ├── plugin-r22/               # Revit 2022 shell — .NET 4.8，TCP
+│   ├── plugin-r23/               # Revit 2023 shell — .NET 4.8，TCP
+│   ├── plugin-r24/               # Revit 2024 shell — .NET 4.8，TCP
+│   ├── plugin-r25/               # Revit 2025 shell — .NET 8，TCP
+│   ├── plugin-r26/               # Revit 2026 shell — .NET 8，TCP
+│   └── plugin-r27/               # Revit 2027 shell — .NET 10，Named Pipe
+├── tests/                        # Golden snapshot + Haiku benchmark + policy 测试
+├── benchmarks/                   # 弱模型（Haiku）准确率 harness
+├── scripts/                      # stage-plugin-zip.ps1、install.ps1、uninstall-all.ps1
+├── docs/                         # Brainstorm、review、ADR
+├── server.json                   # MCP registry manifest
+├── smithery.yaml                 # Smithery aggregator manifest
+├── AGENTS.md                     # Agent-led 安装指南（覆盖 9 个 host client）
+└── ARCHITECTURE.md               # threading + transport + DTO 深入说明
+```
+
+六个 plugin shell 从同一个 `src/shared/` glob 编译 — 按年份的 `#if` fence 处理 Revit API 变化（R26+ 起 `ElementId.IntegerValue` → `.Value`，R27 加 WPF）。
+
+---
+
 ## Install
 
 ### 1. Server — .NET tool

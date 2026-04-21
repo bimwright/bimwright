@@ -48,6 +48,40 @@ Two processes. The **server** is a .NET global tool; the **plugin** is a per-Rev
 
 ---
 
+## Project Structure
+
+```
+rvt-mcp/
+├── src/
+│   ├── Bimwright.Rvt.sln         # Solution (server + 6 plugin shells)
+│   ├── server/                   # Bimwright.Rvt.Server — .NET 8 global tool, stdio MCP
+│   ├── shared/                   # Source glob shared by every plugin shell
+│   │   ├── Handlers/             # One file per tool (create_grid, send_code, …)
+│   │   ├── Commands/             # Revit ribbon commands
+│   │   ├── ToolBaker/            # Self-evolution engine (bake_tool, run_baked_tool)
+│   │   ├── Transport/            # TCP (R22–R26) + Named Pipe (R27) abstraction
+│   │   ├── Infrastructure/       # CommandDispatcher, ExternalEvent marshalling
+│   │   └── Security/             # Auth token, secret masking
+│   ├── plugin-r22/               # Revit 2022 shell — .NET 4.8, TCP
+│   ├── plugin-r23/               # Revit 2023 shell — .NET 4.8, TCP
+│   ├── plugin-r24/               # Revit 2024 shell — .NET 4.8, TCP
+│   ├── plugin-r25/               # Revit 2025 shell — .NET 8, TCP
+│   ├── plugin-r26/               # Revit 2026 shell — .NET 8, TCP
+│   └── plugin-r27/               # Revit 2027 shell — .NET 10, Named Pipe
+├── tests/                        # Golden snapshot + Haiku benchmark + policy tests
+├── benchmarks/                   # Weak-model (Haiku) accuracy harness
+├── scripts/                      # stage-plugin-zip.ps1, install.ps1, uninstall-all.ps1
+├── docs/                         # Brainstorms, reviews, ADRs
+├── server.json                   # MCP registry manifest
+├── smithery.yaml                 # Smithery aggregator manifest
+├── AGENTS.md                     # Agent-led install guide (9 host clients)
+└── ARCHITECTURE.md               # Deep-dive on threading + transport + DTOs
+```
+
+Six plugin shells compile from the same `src/shared/` glob — year-specific `#if` fences handle Revit API drift (`ElementId.IntegerValue` → `.Value` in R26+, WPF in R27).
+
+---
+
 ## Install
 
 ### 1. Server — .NET tool
