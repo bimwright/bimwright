@@ -7,6 +7,8 @@ namespace Bimwright.Rvt.Plugin.Handlers
 {
     public class BakeToolHandler : IRevitCommand
     {
+        private const int PreviewCap = 300;
+
         public string Name => "bake_tool";
         public string Description => "Compile and register a new permanent tool from C# code";
         public string ParametersSchema => @"{""type"":""object"",""properties"":{""name"":{""type"":""string""},""description"":{""type"":""string""},""code"":{""type"":""string""},""parametersSchema"":{""type"":""string""}},""required"":[""name"",""description"",""code""]}";
@@ -34,13 +36,21 @@ namespace Bimwright.Rvt.Plugin.Handlers
             if (registry == null)
                 return CommandResult.Fail("BakedToolRegistry not initialized.");
 
-            // User confirmation
+            // User confirmation — preview is truncated by default; full code sits behind TaskDialog expand.
+            var codeLen = code.Length;
+            var truncated = codeLen > PreviewCap;
+            var preview = truncated ? code.Substring(0, PreviewCap) + "\n... [truncated — expand below for full code]" : code;
+
             var dlg = new TaskDialog("Revit MCP \u2014 Bake new tool?")
             {
                 MainInstruction = $"Bake tool: {name}",
-                MainContent = $"Description: {description}\n\nCode preview:\n{(code.Length > 300 ? code.Substring(0, 300) + "..." : code)}",
+                MainContent = truncated
+                    ? $"Description: {description}\n\nCode size: {codeLen:N0} characters (first {PreviewCap} shown; click 'Show details' for full).\n\nPreview:\n{preview}"
+                    : $"Description: {description}\n\nCode size: {codeLen:N0} characters.\n\nCode:\n{preview}",
+                ExpandedContent = truncated ? $"Full code ({codeLen:N0} chars):\n\n{code}" : null,
                 CommonButtons = TaskDialogCommonButtons.Yes | TaskDialogCommonButtons.No,
-                DefaultButton = TaskDialogResult.No
+                DefaultButton = TaskDialogResult.No,
+                FooterText = "Only bake code you fully trust. Preview may hide later code — review the full code via 'Show details' before confirming."
             };
             if (dlg.Show() != TaskDialogResult.Yes)
                 return CommandResult.Fail("User denied bake operation.");

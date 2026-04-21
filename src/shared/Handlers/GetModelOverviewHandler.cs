@@ -10,9 +10,12 @@ namespace Bimwright.Rvt.Plugin.Handlers
     /// <summary>
     /// Returns a markdown summary of the current Revit project for MCP Prompt injection.
     /// Includes project info, active view, category counts, and MEP system names.
+    /// Iteration is capped at 100_000 elements to keep Claude session startup fast on large models.
     /// </summary>
     public class GetModelOverviewHandler : IRevitCommand
     {
+        private const int ElementCap = 100_000;
+
         public string Name => "get_model_overview";
         public string Description => "Get Revit project overview as markdown for prompt context.";
         public string ParametersSchema => @"{""type"":""object"",""properties"":{}}";
@@ -40,14 +43,20 @@ namespace Bimwright.Rvt.Plugin.Handlers
             sb.AppendLine("## Element Categories");
 
             var stats = new Dictionary<string, int>();
-            int total = 0;
+            int processed = 0;
+            bool truncated = false;
 
             var collector = new FilteredElementCollector(doc)
                 .WhereElementIsNotElementType();
 
             foreach (var el in collector)
             {
-                total++;
+                if (processed >= ElementCap)
+                {
+                    truncated = true;
+                    break;
+                }
+                processed++;
                 var catName = el.Category?.Name ?? "Uncategorized";
                 if (stats.ContainsKey(catName))
                     stats[catName]++;
@@ -55,7 +64,10 @@ namespace Bimwright.Rvt.Plugin.Handlers
                     stats[catName] = 1;
             }
 
-            sb.AppendLine($"Total: {total:N0} elements in {stats.Count} categories");
+            if (truncated)
+                sb.AppendLine($"Counted: {processed:N0} elements (cap reached — model has more) in {stats.Count} categories");
+            else
+                sb.AppendLine($"Total: {processed:N0} elements in {stats.Count} categories");
             sb.AppendLine();
 
             foreach (var kv in stats.OrderByDescending(x => x.Value).Take(30))

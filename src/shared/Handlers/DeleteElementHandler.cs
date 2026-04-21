@@ -1,4 +1,5 @@
-using System.Linq;
+using System;
+using System.Collections.Generic;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using Newtonsoft.Json.Linq;
@@ -26,32 +27,41 @@ namespace Bimwright.Rvt.Plugin.Handlers
             using (var tx = new Transaction(doc, "MCP: Delete elements"))
             {
                 tx.Start();
-                var deleted = 0;
-                var failed = 0;
+                var deletedIds = new List<long>();
+                var failedIds = new List<long>();
+                var errors = new List<string>();
 
                 foreach (var id in elementIds)
                 {
                     try
                     {
                         var elId = RevitCompat.ToElementId(id);
-                        if (doc.GetElement(elId) != null)
+                        if (doc.GetElement(elId) == null)
                         {
-                            doc.Delete(elId);
-                            deleted++;
+                            failedIds.Add(id);
+                            errors.Add($"{id}: element not found");
+                            continue;
                         }
-                        else
-                        {
-                            failed++;
-                        }
+                        doc.Delete(elId);
+                        deletedIds.Add(id);
                     }
-                    catch
+                    catch (Exception ex)
                     {
-                        failed++;
+                        failedIds.Add(id);
+                        errors.Add($"{id}: {ex.Message}");
                     }
                 }
 
                 tx.Commit();
-                return CommandResult.Ok(new { deleted, failed, total = elementIds.Length });
+                return CommandResult.Ok(new
+                {
+                    deleted = deletedIds.Count,
+                    failed = failedIds.Count,
+                    total = elementIds.Length,
+                    deletedIds,
+                    failedIds,
+                    errors
+                });
             }
         }
     }
