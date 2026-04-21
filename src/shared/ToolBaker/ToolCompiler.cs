@@ -64,9 +64,16 @@ public class BakedTool_{safeName} : IRevitCommand
             {
                 var syntaxTree = CSharpSyntaxTree.ParseText(sourceCode);
 
-                var references = AppDomain.CurrentDomain.GetAssemblies()
+                var groups = AppDomain.CurrentDomain.GetAssemblies()
                     .Where(a => !a.IsDynamic && !string.IsNullOrEmpty(a.Location))
                     .GroupBy(a => a.GetName().Name)
+                    .ToList();
+
+                // Log when a simple-name appears multiple times in the AppDomain — silent dedupe upgrades
+                // can make a baked tool compile against a newer API than the author tested.
+                LogAssemblyConflicts(groups);
+
+                var references = groups
                     .Select(g => g.OrderByDescending(a => a.GetName().Version).First())
                     .Select(a => MetadataReference.CreateFromFile(a.Location))
                     .Cast<MetadataReference>()
@@ -113,6 +120,32 @@ public class BakedTool_{safeName} : IRevitCommand
                 error = $"Compilation error: {ex.Message}";
                 return null;
             }
+        }
+
+        private static void LogAssemblyConflicts(System.Collections.Generic.List<IGrouping<string, Assembly>> groups)
+        {
+            try
+            {
+                var conflicts = groups.Where(g => g.Count() > 1).ToList();
+                if (conflicts.Count == 0) return;
+
+                var logDir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "Bimwright", "baked");
+                Directory.CreateDirectory(logDir);
+                var logPath = Path.Combine(logDir, "compile-refs.log");
+
+                var sb = new System.Text.StringBuilder();
+                sb.AppendLine($"{DateTime.UtcNow:o} Bake-compile assembly dedupe conflicts:");
+                foreach (var g in conflicts)
+                {
+                    var versions = g.Select(a => a.GetName().Version?.ToString() ?? "?").ToArray();
+                    var picked = g.OrderByDescending(a => a.GetName().Version).First().GetName().Version?.ToString() ?? "?";
+                    sb.AppendLine($"  {g.Key}: versions=[{string.Join(", ", versions)}] → picked {picked}");
+                }
+                File.AppendAllText(logPath, sb.ToString());
+            }
+            catch { /* diagnostic path must not break compilation */ }
         }
     }
 }

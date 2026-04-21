@@ -27,12 +27,14 @@ namespace Bimwright.Rvt.Plugin.Handlers
             if (command == null)
                 return CommandResult.Fail($"Baked tool '{name}' not found. Use list_baked_tools to see available tools.");
 
-            // Increment usage counter
-            App.Instance.BakedToolRegistry?.IncrementCallCount(name);
-
-            // Forward params to the baked tool
             var toolParams = request["params"]?.ToString() ?? "{}";
-            return command.Execute(app, toolParams);
+            var result = command.Execute(app, toolParams);
+
+            // Count only successful invocations so CallCount reflects real usage, not retries against a buggy tool.
+            if (result != null && result.Success)
+                App.Instance.BakedToolRegistry?.IncrementCallCount(name);
+
+            return result;
 #endif
         }
     }
