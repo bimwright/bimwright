@@ -42,11 +42,50 @@ Vài thứ mình care:
 
 ## Architecture
 
-```
-MCP client (Claude Code, ...) ⇄ stdio ⇄ Bimwright.Rvt.Server (.NET 8) ⇄ TCP/Pipe ⇄ Bimwright.Rvt.Plugin.R<nn> (trong Revit.exe) ⇄ Revit API
+```text
++---------------------------+
+| AI Client                 |
+| Claude / Cursor / Codex   |
++---------------------------+
+              |
+              | stdio MCP
+              v
++---------------------------+
+| Bimwright.Rvt.Server      |
+| .NET 8 / C#               |
++---------------------------+
+              |
+              | TCP (R22-R24)
+              | Named Pipe (R25-R27)
+              v
++---------------------------+
+| Plugin Shell              |
+| thin add-in per Revit yr  |
++---------------------------+
+              |
+              | shared command core
+              | from `src/shared/`
+              v
++---------------------------+
+| ExternalEvent Marshal     |
+| execution -> Revit UI     |
++---------------------------+
+              |
+              v
++---------------------------+
+| Revit API                 |
++---------------------------+
+              |
+              v
++---------------------------+
+| Model / Transaction /     |
+| Undo                      |
++---------------------------+
 ```
 
-Hai process. **Server** là .NET global tool; **plugin** là add-in DLL riêng cho từng năm Revit. Xem [ARCHITECTURE.md](ARCHITECTURE.md) để có full picture.
+`rvt-mcp` là một **full C# MCP stack**. MCP server, per-version Revit plugin shells, transport bridge, command handlers, DTO mapping, và ToolBaker pipeline đều viết bằng C# dùng official MCP C# SDK. Không có Node.js sidecar trên máy Revit — chỉ .NET + Revit.
+
+Điều đó quan trọng vì nhiều MCP example và server trong ecosystem dựa trên Node.js/TypeScript runtime. Dự án này thì không. Với các team Revit/BIM, điều đó có nghĩa là một ngôn ngữ, một build chain, và quy trình debug / audit / deploy đơn giản hơn. Phần khác biệt theo version nằm ở edge: mỗi năm Revit có một thin plugin shell riêng, và tất cả cùng compile từ `src/shared/`. Xem [ARCHITECTURE.md](ARCHITECTURE.md) để biết thêm chi tiết.
 
 ---
 
@@ -181,7 +220,7 @@ Compat matrix rộng hơn nằm trong roadmap v0.2.
 ## Quickstart — 5 phút cho tool call đầu tiên
 
 1. `dotnet tool install -g Bimwright.Rvt.Server` + `pwsh install.ps1`.
-2. Mở Revit, click nút ribbon **Bimwright → Start MCP**.
+2. Mở Revit, vào **Add-Ins → BIMwright**, rồi bấm nút toggle MCP.
 3. Trong MCP client, chạy `tools/list` — sẽ thấy các toolset mặc định (`query`, `create`, `view`, `meta`).
 4. Call `get_current_view_info` — nhận về DTO kiểu:
    ```json

@@ -7,11 +7,11 @@ namespace Bimwright.Rvt.Plugin
     {
         public PushButton ToggleButton { get; set; }
         public PushButton HistoryButton { get; set; }
+        public PushButton StatusButton { get; set; }
     }
 
     public static class RibbonSetup
     {
-        private const string TabName = "BIMwright";
         private const string PanelName = "BIMwright";
 
         public static RibbonResult Create(UIControlledApplication application)
@@ -39,20 +39,35 @@ namespace Bimwright.Rvt.Plugin
                 ToolTip = "Show MCP command history"
             };
 
-            var stack = panel.AddStackedItems(toggleData, historyData);
+            var statusData = new PushButtonData(
+                "ShowStatus", "Status",
+                assemblyPath,
+                "Bimwright.Rvt.Plugin.Commands.ShowStatusCommand")
+            {
+                LargeImage = IconGenerator.Info32,
+                Image = IconGenerator.Info16,
+                ToolTip = "Show MCP status"
+            };
+
+            var stack = panel.AddStackedItems(toggleData, historyData, statusData);
 
             return new RibbonResult
             {
                 ToggleButton = stack[0] as PushButton,
-                HistoryButton = stack[1] as PushButton
+                HistoryButton = stack[1] as PushButton,
+                StatusButton = stack[2] as PushButton
             };
         }
 
         private static RibbonPanel ResolvePanel(UIControlledApplication application)
         {
-            try { application.CreateRibbonTab(TabName); }
-            catch (Autodesk.Revit.Exceptions.ArgumentException) { /* already created */ }
-            return application.CreateRibbonPanel(TabName, PanelName);
+            foreach (var panel in application.GetRibbonPanels(Tab.AddIns))
+            {
+                if (panel.Name == PanelName) return panel;
+            }
+
+            return application.CreateRibbonPanel(Tab.AddIns, PanelName);
         }
     }
 }
+

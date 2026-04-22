@@ -40,11 +40,50 @@ A few things I care about:
 
 ## Architecture
 
-```
-MCP client (Claude Code, etc.) ⇄ stdio ⇄ Bimwright.Rvt.Server (.NET 8) ⇄ TCP/Pipe ⇄ Bimwright.Rvt.Plugin.R<nn> (inside Revit.exe) ⇄ Revit API
+```text
++---------------------------+
+| AI Client                 |
+| Claude / Cursor / Codex   |
++---------------------------+
+              |
+              | stdio MCP
+              v
++---------------------------+
+| Bimwright.Rvt.Server      |
+| .NET 8 / C#               |
++---------------------------+
+              |
+              | TCP (R22-R24)
+              | Named Pipe (R25-R27)
+              v
++---------------------------+
+| Plugin Shell              |
+| thin add-in per Revit yr  |
++---------------------------+
+              |
+              | shared command core
+              | from `src/shared/`
+              v
++---------------------------+
+| ExternalEvent Marshal     |
+| execution -> Revit UI     |
++---------------------------+
+              |
+              v
++---------------------------+
+| Revit API                 |
++---------------------------+
+              |
+              v
++---------------------------+
+| Model / Transaction /     |
+| Undo                      |
++---------------------------+
 ```
 
-Two processes. The **server** is a .NET global tool; the **plugin** is a per-Revit-year add-in DLL. See [ARCHITECTURE.md](ARCHITECTURE.md) for the full picture.
+`rvt-mcp` is a **full C# MCP stack**. The MCP server, per-version Revit plugin shells, transport bridge, command handlers, DTO mapping, and ToolBaker pipeline are all written in C# using the official MCP C# SDK. There is no Node.js sidecar on the Revit machine — just .NET + Revit.
+
+That matters because many MCP examples and servers in the ecosystem are built around a Node.js/TypeScript runtime. This project is not. For Revit shops, that means one language, one build chain, and a simpler story for debugging, auditing, and deployment. The version split is explicit at the edge: one thin plugin shell per Revit year, all compiling the same `src/shared/` source glob. See [ARCHITECTURE.md](ARCHITECTURE.md) for the full deep-dive.
 
 ---
 
@@ -179,7 +218,7 @@ Broader client-compat matrix is on the v0.2 roadmap.
 ## Quickstart — 5 minutes to first tool call
 
 1. `dotnet tool install -g Bimwright.Rvt.Server` + `pwsh install.ps1`.
-2. Open Revit, click the **Bimwright → Start MCP** ribbon button.
+2. Open Revit, go to **Add-Ins → BIMwright**, then click the MCP toggle button.
 3. In your MCP client, run `tools/list` — you should see the default toolsets (`query`, `create`, `view`, `meta`).
 4. Call `get_current_view_info` — you'll get back a DTO like:
    ```json

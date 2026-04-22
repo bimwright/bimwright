@@ -42,11 +42,50 @@
 
 ## Architecture
 
-```
-MCP client (Claude Code, ...) ⇄ stdio ⇄ Bimwright.Rvt.Server (.NET 8) ⇄ TCP/Pipe ⇄ Bimwright.Rvt.Plugin.R<nn> (Revit.exe 内) ⇄ Revit API
+```text
++---------------------------+
+| AI Client                 |
+| Claude / Cursor / Codex   |
++---------------------------+
+              |
+              | stdio MCP
+              v
++---------------------------+
+| Bimwright.Rvt.Server      |
+| .NET 8 / C#               |
++---------------------------+
+              |
+              | TCP (R22-R24)
+              | Named Pipe (R25-R27)
+              v
++---------------------------+
+| Plugin Shell              |
+| thin add-in per Revit yr  |
++---------------------------+
+              |
+              | shared command core
+              | from `src/shared/`
+              v
++---------------------------+
+| ExternalEvent Marshal     |
+| execution -> Revit UI     |
++---------------------------+
+              |
+              v
++---------------------------+
+| Revit API                 |
++---------------------------+
+              |
+              v
++---------------------------+
+| Model / Transaction /     |
+| Undo                      |
++---------------------------+
 ```
 
-两个 process。**Server** 是 .NET global tool；**plugin** 是每个 Revit 年份一个 add-in DLL。完整图景看 [ARCHITECTURE.md](ARCHITECTURE.md)。
+`rvt-mcp` 是一个 **full C# MCP stack**。MCP server、按版本划分的 Revit plugin shell、transport bridge、command handlers、DTO mapping 和 ToolBaker pipeline 全部使用 C# 编写，并基于官方 MCP C# SDK。Revit 机器上没有 Node.js sidecar——只有 .NET + Revit。
+
+这点很重要，因为生态里不少 MCP 示例和 server 都围绕 Node.js/TypeScript runtime。**rvt-mcp** 不是这样。对 Revit/BIM 团队来说，这意味着一种语言、一条 build chain，以及更简单的 debug / audit / deploy 流程。版本差异只放在边缘：每个 Revit 年份一个 thin plugin shell，所有共享逻辑都从 `src/shared/` 编译。更多细节见 [ARCHITECTURE.md](ARCHITECTURE.md)。
 
 ---
 
@@ -181,7 +220,7 @@ pwsh uninstall-all.ps1 -KeepLogs  # 保留 *.log 和 *.jsonl
 ## Quickstart — 5 分钟内跑通第一个 tool call
 
 1. `dotnet tool install -g Bimwright.Rvt.Server` + `pwsh install.ps1`。
-2. 打开 Revit，点 ribbon 上的 **Bimwright → Start MCP**。
+2. 打开 Revit，进入 **Add-Ins → BIMwright**，然后点击 MCP toggle 按钮。
 3. 在 MCP client 里跑 `tools/list` — 会看到默认的 toolset（`query`、`create`、`view`、`meta`）。
 4. Call `get_current_view_info` — 会拿到一个 DTO：
    ```json
