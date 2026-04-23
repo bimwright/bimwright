@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Bimwright.Rvt.Plugin.Lint;
 using Xunit;
 
@@ -64,6 +65,36 @@ namespace Bimwright.Rvt.Tests.Lint
             // No single pattern has ≥50% coverage here
             Assert.Null(result.Dominant);
             Assert.True(result.Patterns.Count >= 2);
+        }
+
+        [Fact]
+        public void Analyze_outliers_sorted_by_edit_distance_closest_first()
+        {
+            var names = new[]
+            {
+                "L01-Lobby", "L02-Office", "L03-Roof", "L04-Plant",
+                "L05-Basement", "L06-Storage", "L07-Garage",  // dominant
+                "Level 1",                                     // close to dominant (token-count diff 0-1)
+                "Completely Different Name 42"                 // far from dominant
+            };
+            var result = ViewNamingAnalyzer.Analyze(names);
+            Assert.Equal("L{NN}-{Name}", result.Dominant);
+            // Only close-to-dominant outliers returned
+            Assert.Single(result.Outliers);
+            Assert.Equal("Level 1", result.Outliers[0].Name);
+            Assert.Equal("L{NN}-{Name}", result.Outliers[0].ClosestPattern);
+        }
+
+        [Fact]
+        public void Analyze_outliers_capped_at_20()
+        {
+            // 21 "almost-matching" outliers vs 40 matching → outliers list stops at 20
+            var names = new List<string>();
+            for (int i = 1; i <= 40; i++) names.Add($"L{i:00}-View");
+            for (int i = 1; i <= 21; i++) names.Add($"Level {i}");  // each tokenizes to "{Name} {NN}"
+            var result = ViewNamingAnalyzer.Analyze(names);
+            Assert.Equal("L{NN}-{Name}", result.Dominant);
+            Assert.Equal(20, result.Outliers.Count);
         }
     }
 }

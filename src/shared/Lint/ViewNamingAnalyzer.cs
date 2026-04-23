@@ -57,6 +57,26 @@ namespace Bimwright.Rvt.Plugin.Lint
             return token;
         }
 
+        private static int CountTokens(string pattern)
+        {
+            return Regex.Split(pattern, @"[-_\s]+").Count(p => !string.IsNullOrEmpty(p));
+        }
+
+        private static int Levenshtein(string a, string b)
+        {
+            if (string.IsNullOrEmpty(a)) return b?.Length ?? 0;
+            if (string.IsNullOrEmpty(b)) return a.Length;
+            var d = new int[a.Length + 1, b.Length + 1];
+            for (int i = 0; i <= a.Length; i++) d[i, 0] = i;
+            for (int j = 0; j <= b.Length; j++) d[0, j] = j;
+            for (int i = 1; i <= a.Length; i++)
+                for (int j = 1; j <= b.Length; j++)
+                    d[i, j] = Math.Min(
+                        Math.Min(d[i - 1, j] + 1, d[i, j - 1] + 1),
+                        d[i - 1, j - 1] + (a[i - 1] == b[j - 1] ? 0 : 1));
+            return d[a.Length, b.Length];
+        }
+
         /// <summary>Coverage threshold for a pattern to qualify as `dominant`.</summary>
         public const double DominantCoverageThreshold = 0.50;
 
@@ -94,13 +114,36 @@ namespace Bimwright.Rvt.Plugin.Lint
                 ? patterns[0].Pattern
                 : null;
 
-            // Outliers (Task 3 fills; empty for now)
+            // Outliers: names whose pattern != dominant AND token count is within ±1 of dominant's
+            // (close-but-wrong > completely-different). Sorted by edit distance to dominant exemplar ascending.
+            var outliers = new List<Outlier>();
+            if (dominant != null && patterns.Count > 0)
+            {
+                var dominantTokenCount = CountTokens(dominant);
+                var dominantExample = patterns[0].Examples.FirstOrDefault() ?? "";
+                var candidates = names
+                    .Select(n => new { Name = n, Pattern = Tokenize(n) })
+                    .Where(x => x.Pattern != dominant)
+                    .Where(x => Math.Abs(CountTokens(x.Pattern) - dominantTokenCount) <= 1)
+                    .Select(x => new Outlier
+                    {
+                        Id = 0,  // filled by handler with Revit ElementId
+                        Name = x.Name,
+                        ClosestPattern = dominant,
+                        EditDistance = Levenshtein(x.Name, dominantExample)
+                    })
+                    .OrderBy(o => o.EditDistance)
+                    .Take(20)
+                    .ToList();
+                outliers = candidates;
+            }
+
             return new NamingAnalysis
             {
                 TotalViews = total,
                 Patterns = patterns,
                 Dominant = dominant,
-                Outliers = new List<Outlier>()
+                Outliers = outliers
             };
         }
     }
