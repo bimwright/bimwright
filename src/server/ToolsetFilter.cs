@@ -15,12 +15,12 @@ namespace Bimwright.Rvt.Server
         public static readonly string[] KnownToolsets =
         {
             "query", "create", "modify", "delete", "view",
-            "export", "annotation", "mep", "toolbaker", "meta"
+            "export", "annotation", "mep", "toolbaker", "meta", "lint"
         };
 
         public static readonly string[] DefaultOn =
         {
-            "query", "create", "view", "meta"
+            "query", "create", "view", "meta", "lint"
         };
 
         public static readonly string[] WriteCapable =

@@ -787,4 +787,41 @@ namespace Bimwright.Rvt.Server
             }
         }
     }
+
+    [McpServerToolType, Toolset("lint")]
+    public class LintTools
+    {
+        [McpServerTool(Name = "analyze_view_naming_patterns", ReadOnly = true, Idempotent = true), System.ComponentModel.Description("Infer dominant view-naming pattern from project. Returns patterns with coverage + outliers. Zero args. Use before suggest_view_name_corrections.")]
+        public static async Task<string> AnalyzeViewNamingPatterns()
+        {
+            try
+            {
+                var result = await ToolGateway.SendToRevit("analyze_view_naming_patterns");
+                return JsonConvert.SerializeObject(result, Formatting.Indented);
+            }
+            catch (Exception ex) { return $"Error: {ex.Message}"; }
+        }
+
+        [McpServerTool(Name = "suggest_view_name_corrections", ReadOnly = true, Idempotent = true), System.ComponentModel.Description("Propose corrected view names for outliers. Optional profile=<id> uses firm-profile library rule; omit to use project-inferred dominant pattern. Returns suggestions array with id/current/suggested/reason.")]
+        public static async Task<string> SuggestViewNameCorrections(string profile = "")
+        {
+            try
+            {
+                var result = await ToolGateway.SendToRevit("suggest_view_name_corrections", new { profile });
+                return JsonConvert.SerializeObject(result, Formatting.Indented);
+            }
+            catch (Exception ex) { return $"Error: {ex.Message}"; }
+        }
+
+        [McpServerTool(Name = "detect_firm_profile", ReadOnly = true, Idempotent = true), System.ComponentModel.Description("Fingerprint project naming (views + sheets + levels), match against firm-profile library. Returns project_pattern (always) + library_match (null if library empty or no match).")]
+        public static async Task<string> DetectFirmProfile()
+        {
+            try
+            {
+                var result = await ToolGateway.SendToRevit("detect_firm_profile");
+                return JsonConvert.SerializeObject(result, Formatting.Indented);
+            }
+            catch (Exception ex) { return $"Error: {ex.Message}"; }
+        }
+    }
 }

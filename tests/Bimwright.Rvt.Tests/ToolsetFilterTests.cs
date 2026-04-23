@@ -15,7 +15,7 @@ namespace Bimwright.Rvt.Tests
         {
             var set = ToolsetFilter.Resolve(null);
             Assert.Equal(
-                new[] { "create", "meta", "query", "view" },
+                new[] { "create", "lint", "meta", "query", "view" },
                 set.OrderBy(s => s).ToArray());
         }
 
@@ -24,7 +24,7 @@ namespace Bimwright.Rvt.Tests
         {
             var set = ToolsetFilter.Resolve(new BimwrightConfig { Toolsets = new List<string>() });
             Assert.Equal(
-                new[] { "create", "meta", "query", "view" },
+                new[] { "create", "lint", "meta", "query", "view" },
                 set.OrderBy(s => s).ToArray());
         }
 
@@ -115,9 +115,9 @@ namespace Bimwright.Rvt.Tests
         public void Resolve_ReadOnlyWithDefaults_LeavesOnlyReadSafeDefaults()
         {
             var set = ToolsetFilter.Resolve(new BimwrightConfig { ReadOnly = true });
-            // Default = query+create+view+meta. ReadOnly strips create.
+            // Default = query+create+view+meta+lint. ReadOnly strips create.
             Assert.Equal(
-                new[] { "meta", "query", "view" },
+                new[] { "lint", "meta", "query", "view" },
                 set.OrderBy(s => s).ToArray());
         }
 
@@ -136,9 +136,9 @@ namespace Bimwright.Rvt.Tests
         // --- Invariants ---------------------------------------------------
 
         [Fact]
-        public void KnownToolsets_Contains10Entries()
+        public void KnownToolsets_Contains11Entries()
         {
-            Assert.Equal(10, ToolsetFilter.KnownToolsets.Length);
+            Assert.Equal(11, ToolsetFilter.KnownToolsets.Length);
         }
 
         [Fact]
