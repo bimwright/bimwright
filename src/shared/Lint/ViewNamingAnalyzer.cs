@@ -43,19 +43,16 @@ namespace Bimwright.Rvt.Plugin.Lint
 
         private static string ClassifyToken(string token)
         {
-            // Pure digits - tokenize to {NN}
+            // Reserved tokens (3D, Plan, etc) stay literal
+            if (ReservedTokens.Contains(token)) return token;
+            // Pure digits → {NN}
             if (Regex.IsMatch(token, @"^\d+$")) return "{NN}";
-
-            // Mixed alphanumeric (e.g., "L01")
+            // Pure alpha → {Name}
+            if (Regex.IsMatch(token, @"^[A-Za-z]+$")) return "{Name}";
+            // Mixed alpha+digit like "L01": preserve leading letters, digit-substitute trailing
             var m = Regex.Match(token, @"^([A-Za-z]+)(\d+)$");
-            if (m.Success)
-            {
-                var letters = m.Groups[1].Value;
-                // Keep letter part as-is, digits become {NN}
-                return letters + "{NN}";
-            }
-
-            // Everything else (pure alpha, reserved words) - keep literal
+            if (m.Success) return m.Groups[1].Value + "{NN}";
+            // Fallback: unknown shape — keep literal
             return token;
         }
     }
