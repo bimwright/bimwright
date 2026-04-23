@@ -45,6 +45,7 @@ namespace Bimwright.Rvt.Plugin
             // Phase 11: Lint toolset (L-05 + L-13)
             Register(new Handlers.AnalyzeViewNamingPatternsHandler());
             Register(new Handlers.SuggestViewNameCorrectionsHandler());
+            Register(new Handlers.DetectFirmProfileHandler());
             // A6 batch execution — needs dispatcher ref to look up sub-commands
             Register(new Handlers.BatchExecuteHandler(this));
             // ToolBaker (Debug only — gated by #if in handlers)
