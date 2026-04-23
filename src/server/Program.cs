@@ -175,6 +175,7 @@ namespace Bimwright.Rvt.Server
             if (enabled.Contains("mep"))        mcp = mcp.WithTools<MepTools>();
             if (enabled.Contains("toolbaker"))  mcp = mcp.WithTools<ToolbakerTools>();
             if (enabled.Contains("meta"))       mcp = mcp.WithTools<MetaTools>();
+            if (enabled.Contains("lint"))       mcp = mcp.WithTools<LintTools>();
             return mcp;
         }
     }
