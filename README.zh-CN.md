@@ -241,7 +241,7 @@ pwsh uninstall-all.ps1 -KeepLogs  # 保留 *.log 和 *.jsonl
 
 ## Toolsets
 
-**29 个 tool 分成 10 个 toolset。** 4 个 toolset 默认开（`query`、`create`、`view`、`meta`），其他通过 `--toolsets` 或 config opt-in。
+**32 个 tool 分成 11 个 toolset。** 5 个 toolset 默认开（`query`、`create`、`view`、`meta`、`lint`），其他通过 `--toolsets` 或 config opt-in。
 
 | Toolset | Tools | 默认 |
 |---------|-------|------|
@@ -249,6 +249,7 @@ pwsh uninstall-all.ps1 -KeepLogs  # 保留 *.log 和 *.jsonl
 | `create` | grid, level, room, line-based, point-based, surface-based element | **on** |
 | `view` | create view, get current view info, place view on sheet | **on** |
 | `meta` | `show_message`, `batch_execute` | **on** |
+| `lint` | 视图命名模式分析、修正建议、firm-profile 检测 | **开启** |
 | `modify` | `operate_element`, `color_elements` | off |
 | `delete` | `delete_element` | off |
 | `annotation` | `tag_all_rooms`, `tag_all_walls` | off |
@@ -291,6 +292,9 @@ pwsh uninstall-all.ps1 -KeepLogs  # 保留 *.log 和 *.jsonl
 | `meta` | `show_message` | 在 Revit 里弹 TaskDialog — 测连接、通知用户。 |
 | `meta` | `batch_execute` | 在一个 TransactionGroup 里原子执行 N 个命令（一次 undo）。 |
 | `meta` | `analyze_usage_patterns` | SQLite stats：tool 调用次数、session、error（最近 N 天）。 |
+| `lint` | `analyze_view_naming_patterns` | 推断视图命名主导模式 + 覆盖率 + 偏离项。 |
+| `lint` | `suggest_view_name_corrections` | 为偏离的视图名称建议修正（inferred 或 profile）。 |
+| `lint` | `detect_firm_profile` | 指纹项目命名，匹配 firm-profile 库。 |
 
 ---
 

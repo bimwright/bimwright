@@ -239,7 +239,7 @@ Broader client-compat matrix is on the v0.2 roadmap.
 
 ## Toolsets
 
-**29 tools across 10 toolsets.** Four toolsets are on by default (`query`, `create`, `view`, `meta`); the rest opt in via `--toolsets` or config.
+**32 tools across 11 toolsets.** Five toolsets are on by default (`query`, `create`, `view`, `meta`, `lint`); the rest opt in via `--toolsets` or config.
 
 | Toolset | Tools | Default |
 |---------|-------|---------|
@@ -247,6 +247,7 @@ Broader client-compat matrix is on the v0.2 roadmap.
 | `create` | grid, level, room, line-based, point-based, surface-based element | **on** |
 | `view` | create view, get current view info, place view on sheet | **on** |
 | `meta` | `show_message`, `batch_execute` | **on** |
+| `lint` | view-naming pattern analysis, correction suggestions, firm-profile detect | **on** |
 | `modify` | `operate_element`, `color_elements` | off |
 | `delete` | `delete_element` | off |
 | `annotation` | `tag_all_rooms`, `tag_all_walls` | off |
@@ -289,6 +290,9 @@ Enable with `--toolsets query,create,modify,meta` or `--toolsets all`. Add `--re
 | `meta` | `show_message` | TaskDialog inside Revit — connection test or user notification. |
 | `meta` | `batch_execute` | Run N commands atomically in one TransactionGroup (single undo). |
 | `meta` | `analyze_usage_patterns` | SQLite stats: tool call counts, sessions, errors (last N days). |
+| `lint` | `analyze_view_naming_patterns` | Infer dominant view-naming pattern + coverage + outliers. |
+| `lint` | `suggest_view_name_corrections` | Propose corrected names for view outliers (inferred or profile-based). |
+| `lint` | `detect_firm_profile` | Fingerprint project naming, match against firm-profile library. |
 
 ---
 

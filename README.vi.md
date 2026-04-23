@@ -241,7 +241,7 @@ Compat matrix rộng hơn nằm trong roadmap v0.2.
 
 ## Toolsets
 
-**29 tool chia thành 10 toolset.** 4 toolset bật mặc định (`query`, `create`, `view`, `meta`); còn lại opt-in qua `--toolsets` hoặc config.
+**32 tool chia thành 11 toolset.** 5 toolset bật mặc định (`query`, `create`, `view`, `meta`, `lint`); còn lại opt-in qua `--toolsets` hoặc config.
 
 | Toolset | Tools | Mặc định |
 |---------|-------|----------|
@@ -249,6 +249,7 @@ Compat matrix rộng hơn nằm trong roadmap v0.2.
 | `create` | grid, level, room, line-based, point-based, surface-based element | **on** |
 | `view` | create view, get current view info, place view on sheet | **on** |
 | `meta` | `show_message`, `batch_execute` | **on** |
+| `lint` | phân tích mẫu đặt tên view, gợi ý sửa, phát hiện firm-profile | **bật** |
 | `modify` | `operate_element`, `color_elements` | off |
 | `delete` | `delete_element` | off |
 | `annotation` | `tag_all_rooms`, `tag_all_walls` | off |
@@ -291,6 +292,9 @@ Bật bằng `--toolsets query,create,modify,meta` hoặc `--toolsets all`. Thê
 | `meta` | `show_message` | TaskDialog trong Revit — test connection, notify user. |
 | `meta` | `batch_execute` | Chạy N command atomic trong 1 TransactionGroup (1 undo). |
 | `meta` | `analyze_usage_patterns` | Stats từ SQLite: tool calls, session, error (N ngày gần nhất). |
+| `lint` | `analyze_view_naming_patterns` | Suy ra mẫu đặt tên view chủ đạo + độ phủ + outliers. |
+| `lint` | `suggest_view_name_corrections` | Đề xuất tên view đã sửa cho outliers (inferred hoặc theo profile). |
+| `lint` | `detect_firm_profile` | Fingerprint naming của project, khớp với firm-profile library. |
 
 ---
 

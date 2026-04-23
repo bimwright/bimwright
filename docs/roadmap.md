@@ -22,6 +22,7 @@ Shipped on compile + one smoke test per Revit year.
 - **AspNetCore slim-down** — server is currently `Microsoft.NET.Sdk.Web` so the `.nupkg` drags ~40 AspNetCore DLLs even for stdio-only users. Either split `Bimwright.Rvt.Server` (stdio) from `Bimwright.Rvt.Server.Http` (SSE), or conditionally pull in AspNetCore only for the HTTP path.
 - **Plugin ZIP size** — strip non-win-x64 entries from `runtimes/` in `scripts/stage-plugin-zip.ps1`. R25+ zips drop from ~16 MB → ~5 MB.
 - **Testing & drift detection (aspect #7)** — _delivered 2026-04-18_ — golden snapshot of the MCP tool surface diffed on every test run; manual Haiku benchmark procedure (`benchmarks/`) with trigger rules and 15% regression threshold; S4 response-size observability hook (passive stderr warning, no enforcement).
+- **View-naming lint (L-05 + L-13)** — _delivered 2026-04-23 (v0.2.1)_ — 3 new read-only tools in a new `lint` toolset (default on): `analyze_view_naming_patterns`, `suggest_view_name_corrections`, `detect_firm_profile`. Firm-profile library scaffolding in place (`docs/firm-profiles/README.md`); no profiles shipped yet.
 
 ## v0.3 — ecosystem + async
 
