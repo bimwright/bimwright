@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -55,5 +56,76 @@ namespace Bimwright.Rvt.Plugin.Lint
             // Fallback: unknown shape — keep literal
             return token;
         }
+
+        /// <summary>Coverage threshold for a pattern to qualify as `dominant`.</summary>
+        public const double DominantCoverageThreshold = 0.50;
+
+        public static NamingAnalysis Analyze(IEnumerable<string> viewNames)
+        {
+            var names = viewNames?.Where(n => !string.IsNullOrWhiteSpace(n)).ToArray() ?? new string[0];
+            if (names.Length == 0)
+            {
+                return new NamingAnalysis
+                {
+                    TotalViews = 0,
+                    Patterns = new List<PatternSummary>(),
+                    Dominant = null,
+                    Outliers = new List<Outlier>()
+                };
+            }
+
+            // Tokenize + group
+            var grouped = names
+                .Select(n => new { Name = n, Pattern = Tokenize(n) })
+                .GroupBy(x => x.Pattern)
+                .OrderByDescending(g => g.Count())
+                .ToArray();
+
+            var total = names.Length;
+            var patterns = grouped.Select(g => new PatternSummary
+            {
+                Pattern = g.Key,
+                Examples = g.Take(3).Select(x => x.Name).ToArray(),
+                Count = g.Count(),
+                Coverage = Math.Round((double)g.Count() / total, 4)
+            }).ToList();
+
+            var dominant = patterns.Count > 0 && patterns[0].Coverage >= DominantCoverageThreshold
+                ? patterns[0].Pattern
+                : null;
+
+            // Outliers (Task 3 fills; empty for now)
+            return new NamingAnalysis
+            {
+                TotalViews = total,
+                Patterns = patterns,
+                Dominant = dominant,
+                Outliers = new List<Outlier>()
+            };
+        }
+    }
+
+    public class NamingAnalysis
+    {
+        public int TotalViews { get; set; }
+        public List<PatternSummary> Patterns { get; set; }
+        public string Dominant { get; set; }
+        public List<Outlier> Outliers { get; set; }
+    }
+
+    public class PatternSummary
+    {
+        public string Pattern { get; set; }
+        public string[] Examples { get; set; }
+        public int Count { get; set; }
+        public double Coverage { get; set; }
+    }
+
+    public class Outlier
+    {
+        public long Id { get; set; }
+        public string Name { get; set; }
+        public string ClosestPattern { get; set; }
+        public int EditDistance { get; set; }
     }
 }
