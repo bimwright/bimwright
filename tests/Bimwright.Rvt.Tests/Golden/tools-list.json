@@ -1,6 +1,6 @@
 {
   "generated_by": "ToolsListSnapshotTests",
-  "tool_count": 29,
+  "tool_count": 32,
   "tools": [
     {
       "name": "ai_element_filter",
@@ -75,6 +75,15 @@
             "type": "Int32"
           }
         },
+        "required": [],
+        "type": "object"
+      }
+    },
+    {
+      "name": "analyze_view_naming_patterns",
+      "description_hash": "sha256:40b34c5c7f62e9be906c29ba39fa122eff4315c0772de792a36f088b83051496",
+      "inputSchema": {
+        "properties": {},
         "required": [],
         "type": "object"
       }
@@ -390,6 +399,15 @@
       }
     },
     {
+      "name": "detect_firm_profile",
+      "description_hash": "sha256:dbed8ff737d1c957d53922d17d24f2167b75aaa81ab605c5e90e8d11a0ebbade",
+      "inputSchema": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      }
+    },
+    {
       "name": "detect_system_elements",
       "description_hash": "sha256:ac01c29a84b0d2b088dff4e04350ea4ce16af5681d1d14aa5195b1c30685560b",
       "inputSchema": {
@@ -578,6 +596,20 @@
             "type": "String"
           },
           "title": {
+            "description": "",
+            "type": "String"
+          }
+        },
+        "required": [],
+        "type": "object"
+      }
+    },
+    {
+      "name": "suggest_view_name_corrections",
+      "description_hash": "sha256:aed836a12bfed59f8ea9edfbe74a4e7f440f39710e14df86bfc570df47a81dce",
+      "inputSchema": {
+        "properties": {
+          "profile": {
             "description": "",
             "type": "String"
           }
