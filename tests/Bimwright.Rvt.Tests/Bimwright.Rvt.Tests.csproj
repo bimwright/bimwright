@@ -21,6 +21,7 @@
     <Compile Include="..\..\src\shared\Infrastructure\SchemaValidator.cs" Link="Shared\SchemaValidator.cs" />
     <Compile Include="..\..\src\shared\Infrastructure\ResponseSizeGuard.cs" Link="Shared\ResponseSizeGuard.cs" />
     <Compile Include="..\..\src\shared\Handlers\BatchExecutor.cs" Link="Shared\BatchExecutor.cs" />
+    <Compile Include="..\..\src\shared\Lint\ViewNamingAnalyzer.cs" Link="Shared\ViewNamingAnalyzer.cs" />
   </ItemGroup>
 
   <ItemGroup>
