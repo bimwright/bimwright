@@ -23,8 +23,13 @@ dist/
 # Temp
 __temp_research/
 
+# Private — internal research, checklists, TODOs, journal, reference repos.
+# Never goes public. Single catch-all. See .private/README.md for index.
+.private/
+
 # Claude Code
 .claude/
+CLAUDE.md
 
 # OS
 Thumbs.db
