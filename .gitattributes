@@ -1,0 +1,18 @@
+# Default: treat as text, normalize to LF in repo and working tree.
+# Prevents CRLF↔LF diff churn across Windows/Linux/macOS checkouts.
+* text=auto eol=lf
+
+# Windows shell scripts must stay CRLF at runtime.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary formats — no conversion.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.dll binary
+*.exe binary
