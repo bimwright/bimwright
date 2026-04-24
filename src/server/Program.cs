@@ -297,6 +297,34 @@ namespace Bimwright.Rvt.Server
             }
         }
 
+        /// <summary>
+        /// Close the current Server↔Plugin connection and set a new target version.
+        /// Next <see cref="SendToRevit"/> call will reconnect against the new target.
+        /// Pass <c>null</c> to clear the pin and re-enable auto-detect.
+        /// Cancels any in-flight requests — they'd be routed to the now-dead connection.
+        /// </summary>
+        public static void Reconnect(string newTarget)
+        {
+            lock (_connectLock)
+            {
+                _connected = false;
+                try { _client?.Close(); } catch { }
+                try { _pipeStream?.Close(); } catch { }
+                _client = null;
+                _pipeStream = null;
+                _reader = null;
+                _writer = null;
+                _token = null;
+                foreach (var kv in _pending)
+                {
+                    kv.Value.TrySetException(new OperationCanceledException(
+                        "switch_target initiated — in-flight request cancelled."));
+                }
+                _pending.Clear();
+                AuthToken.Target = newTarget;
+            }
+        }
+
         public static async Task<JObject> SendToRevit(string command, object parameters = null)
         {
             EnsureConnected();
@@ -698,6 +726,76 @@ namespace Bimwright.Rvt.Server
                 }
                 var result = await ToolGateway.SendToRevit("show_message", parameters);
                 return JsonConvert.SerializeObject(result);
+            }
+            catch (Exception ex) { return $"Error: {ex.Message}"; }
+        }
+
+        [McpServerTool(Name = "switch_target"), System.ComponentModel.Description(
+            "Switch active Revit connection to a specific version when multiple Revits are running. " +
+            "version: 'R22'|'R23'|'R24'|'R25'|'R26'|'R27' to pin, or 'auto' to clear pin and re-enable auto-detect. " +
+            "Immediately closes the current Server↔Plugin connection (cancels in-flight requests) and updates the target. " +
+            "The next tool call transparently reconnects against the new target — no user confirmation required. " +
+            "Returns: {ok, previousTarget, newTarget, verified (if verify=true)}. " +
+            "verify=true (default): immediately attempts get_current_view_info against the new target to confirm connectivity; " +
+            "set verify=false to skip when the new target's document isn't in a view yet (e.g., Revit just launched).")]
+        public static async Task<string> SwitchTarget(string version, bool verify = true)
+        {
+            try
+            {
+                var previousTarget = AuthToken.Target;
+                string newTarget = null;
+                if (!string.IsNullOrWhiteSpace(version) && !version.Equals("auto", StringComparison.OrdinalIgnoreCase))
+                {
+                    var upper = version.Trim().ToUpperInvariant();
+                    if (Array.IndexOf(AuthToken.AllVersions, upper) < 0)
+                    {
+                        return JsonConvert.SerializeObject(new
+                        {
+                            ok = false,
+                            error = $"Invalid version '{version}'. Allowed: {string.Join(",", AuthToken.AllVersions)} or 'auto'."
+                        });
+                    }
+                    newTarget = upper;
+                }
+
+                ToolGateway.Reconnect(newTarget);
+
+                if (!verify)
+                {
+                    return JsonConvert.SerializeObject(new
+                    {
+                        ok = true,
+                        previousTarget = previousTarget ?? "auto",
+                        newTarget = newTarget ?? "auto",
+                        verified = false,
+                        note = "Target updated. Next tool call will connect to new target."
+                    });
+                }
+
+                try
+                {
+                    var probe = await ToolGateway.SendToRevit("get_current_view_info");
+                    return JsonConvert.SerializeObject(new
+                    {
+                        ok = true,
+                        previousTarget = previousTarget ?? "auto",
+                        newTarget = newTarget ?? "auto",
+                        verified = true,
+                        activeView = probe.Value<string>("viewName")
+                    });
+                }
+                catch (Exception verifyEx)
+                {
+                    return JsonConvert.SerializeObject(new
+                    {
+                        ok = true,
+                        previousTarget = previousTarget ?? "auto",
+                        newTarget = newTarget ?? "auto",
+                        verified = false,
+                        verifyError = verifyEx.Message,
+                        note = "Target set, but verify failed. The next tool call may still succeed."
+                    });
+                }
             }
             catch (Exception ex) { return $"Error: {ex.Message}"; }
         }

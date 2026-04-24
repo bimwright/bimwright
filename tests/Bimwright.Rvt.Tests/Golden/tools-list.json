@@ -1,6 +1,6 @@
 {
   "generated_by": "ToolsListSnapshotTests",
-  "tool_count": 32,
+  "tool_count": 33,
   "tools": [
     {
       "name": "ai_element_filter",
@@ -615,6 +615,26 @@
           }
         },
         "required": [],
+        "type": "object"
+      }
+    },
+    {
+      "name": "switch_target",
+      "description_hash": "sha256:0b44915a29b4524a01e721cd5618f8e7798cbde769754d5a36aed32daa710def",
+      "inputSchema": {
+        "properties": {
+          "verify": {
+            "description": "",
+            "type": "Boolean"
+          },
+          "version": {
+            "description": "",
+            "type": "String"
+          }
+        },
+        "required": [
+          "version"
+        ],
         "type": "object"
       }
     },
