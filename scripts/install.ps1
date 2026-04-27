@@ -11,8 +11,8 @@
   With -Uninstall, removes both the Bimwright\ folder and the Bimwright.R<nn>.addin
   file for every detected year.
 
-  The script ships inside the release ZIP alongside the per-version plugin zips, so
-  end-users run it directly without needing the repo checked out.
+  The script can ship inside the release ZIP alongside the per-version plugin zips.
+  In that layout, pass -SourceDir <extracted release directory>.
 
 .PARAMETER SourceDir
   Directory containing Bimwright.Rvt.Plugin.R<nn>.zip files. Default: build/plugin-zip/
