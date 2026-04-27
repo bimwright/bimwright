@@ -29,7 +29,7 @@ This file is machine-readable install instructions for AI coding agents (Claude 
    - Before running `install.ps1` without `-WhatIf`.
    - Before editing any MCP host config file.
 3. **Never bypass the Revit undo stack at runtime.** Bimwright's design guarantee is that every edit is reviewable and reversible. Don't advise users to work around transaction wrapping or disable `batch_execute` safety.
-4. **On any failure, offer rollback.** Config edits are auto-backed up to `<file>.bimwright.bak`. The full stack comes off with `pwsh uninstall-all.ps1 -Yes`.
+4. **On any failure, offer rollback.** Config edits are auto-backed up to `<file>.bimwright.bak`. The full stack comes off with the bundled `uninstall-all.ps1 -Yes`.
 5. **Verify before claiming done.** After wiring, run `tools/list` in the host and confirm at least one `bimwright-rvt-*` entry responds, then call `get_current_view_info` with no args.
 
 If the user explicitly says "skip the prompts, just install" — still do gate 1 (preview) and gate 5 (verify), but collapse gates 2 and 3 into a single upfront approval. **Never silently skip preview or verify.**
@@ -82,8 +82,8 @@ Expand-Archive $zip -DestinationPath "$env:TEMP\bimwright-$tag" -Force
 Preview, then install:
 
 ```powershell
-pwsh "$env:TEMP\bimwright-$tag\install.ps1" -WhatIf   # show diff — required
-pwsh "$env:TEMP\bimwright-$tag\install.ps1"           # apply after approval
+pwsh "$env:TEMP\bimwright-$tag\install.ps1" -SourceDir "$env:TEMP\bimwright-$tag" -WhatIf   # show diff — required
+pwsh "$env:TEMP\bimwright-$tag\install.ps1" -SourceDir "$env:TEMP\bimwright-$tag"           # apply after approval
 ```
 
 **Gate B.** `install.ps1` detects installed Revit years via `HKLM:\SOFTWARE\Autodesk\Revit\` and copies matching plugin DLLs into `%APPDATA%\Autodesk\Revit\Addins\<year>\Bimwright\`. Show the `-WhatIf` output and get approval before running without the flag.
@@ -207,8 +207,8 @@ Notes:
 ### 3.f — OpenCode (scripted)
 
 ```powershell
-pwsh install.ps1 -WireClient opencode -WhatIf   # preview
-pwsh install.ps1 -WireClient opencode           # apply
+pwsh "$env:TEMP\bimwright-$tag\install.ps1" -SourceDir "$env:TEMP\bimwright-$tag" -WireClient opencode -WhatIf   # preview
+pwsh "$env:TEMP\bimwright-$tag\install.ps1" -SourceDir "$env:TEMP\bimwright-$tag" -WireClient opencode           # apply
 ```
 
 Writes to `%USERPROFILE%\.config\opencode\opencode.json`. Preserves existing entries and backs up to `opencode.json.bimwright.bak`.
@@ -220,8 +220,8 @@ Prefer the scripted path over hand-editing. If the config file doesn't exist (ho
 ### 3.g — Codex (scripted)
 
 ```powershell
-pwsh install.ps1 -WireClient codex -WhatIf
-pwsh install.ps1 -WireClient codex
+pwsh "$env:TEMP\bimwright-$tag\install.ps1" -SourceDir "$env:TEMP\bimwright-$tag" -WireClient codex -WhatIf
+pwsh "$env:TEMP\bimwright-$tag\install.ps1" -SourceDir "$env:TEMP\bimwright-$tag" -WireClient codex
 ```
 
 Writes to `%USERPROFILE%\.codex\config.toml`. Preserves existing entries and backs up to `config.toml.bimwright.bak`.
@@ -279,9 +279,9 @@ If any of these fail, **do not claim the install succeeded.** Go to rollback.
 ### Full uninstall (everything Bimwright touched)
 
 ```powershell
-pwsh uninstall-all.ps1 -WhatIf    # preview what comes off
-pwsh uninstall-all.ps1 -Yes       # apply without prompt
-pwsh uninstall-all.ps1 -KeepLogs  # preserve logs
+pwsh "$env:TEMP\bimwright-$tag\uninstall-all.ps1" -WhatIf    # preview what comes off
+pwsh "$env:TEMP\bimwright-$tag\uninstall-all.ps1" -Yes       # apply without prompt
+pwsh "$env:TEMP\bimwright-$tag\uninstall-all.ps1" -KeepLogs  # preserve logs
 ```
 
 Removes: .NET global tool, plugin DLLs for every Revit year, discovery files at `%LOCALAPPDATA%\Bimwright\`, ToolBaker cache, and bimwright entries in scanned host configs.
@@ -291,7 +291,7 @@ Removes: .NET global tool, plugin DLLs for every Revit year, discovery files at 
 ### Partial rollback
 
 ```powershell
-pwsh install.ps1 -Uninstall   # plugin only (keeps server + host configs)
+pwsh "$env:TEMP\bimwright-$tag\install.ps1" -Uninstall   # plugin only (keeps server + host configs)
 ```
 
 ### Restore a single host config from backup

@@ -130,16 +130,23 @@ dotnet tool install -g Bimwright.Rvt.Server
 bimwright-rvt --help
 ```
 
-Requires .NET 8 SDK on the machine that runs the MCP client.
+Requires .NET 8 SDK on the machine that runs the MCP client. If the tool is already installed, run `dotnet tool update -g Bimwright.Rvt.Server` instead.
 
 ### 2. Plugin — Revit add-in
 
-Download the latest release from [GitHub Releases](https://github.com/bimwright/rvt-mcp/releases/latest). Extract it and run:
+Download the plugin installer bundle from [GitHub Releases](https://github.com/bimwright/rvt-mcp/releases/latest). The bundle is named `bimwright-rvt-plugin-<tag>.zip` and contains `install.ps1`, `uninstall-all.ps1`, and the six per-Revit plugin ZIPs.
 
 ```powershell
-pwsh install.ps1            # detects every installed Revit year
-pwsh install.ps1 -WhatIf    # preview without changes
-pwsh install.ps1 -Uninstall # clean removal
+$tag = (Invoke-RestMethod https://api.github.com/repos/bimwright/rvt-mcp/releases/latest).tag_name
+$zip = "$env:TEMP\bimwright-rvt-plugin-$tag.zip"
+$dir = "$env:TEMP\bimwright-rvt-plugin-$tag"
+Invoke-WebRequest "https://github.com/bimwright/rvt-mcp/releases/download/$tag/bimwright-rvt-plugin-$tag.zip" -OutFile $zip
+Expand-Archive $zip -DestinationPath $dir -Force
+Set-Location $dir
+
+pwsh .\install.ps1 -SourceDir . -WhatIf    # preview without changes
+pwsh .\install.ps1 -SourceDir .            # detects every installed Revit year
+pwsh .\install.ps1 -Uninstall              # plugin-only removal
 ```
 
 The script detects installed Revit versions via `HKLM:\SOFTWARE\Autodesk\Revit\` and copies the matching plugin into `%APPDATA%\Autodesk\Revit\Addins\<year>\Bimwright\`.
@@ -166,9 +173,9 @@ Drop the `--target` flag and Bimwright auto-detects the running Revit instance v
 Instead of hand-editing `opencode.json` or `~/.codex/config.toml`, run:
 
 ```powershell
-pwsh install.ps1 -WireClient opencode      # writes entries into %USERPROFILE%\.config\opencode\opencode.json
-pwsh install.ps1 -WireClient codex         # writes entries into %USERPROFILE%\.codex\config.toml
-pwsh install.ps1 -WireClient opencode -WhatIf   # preview
+pwsh .\install.ps1 -SourceDir . -WireClient opencode      # writes entries into %USERPROFILE%\.config\opencode\opencode.json
+pwsh .\install.ps1 -SourceDir . -WireClient codex         # writes entries into %USERPROFILE%\.codex\config.toml
+pwsh .\install.ps1 -SourceDir . -WireClient opencode -WhatIf   # preview
 ```
 
 The script:
@@ -185,10 +192,10 @@ Claude Code users: paste the JSON snippet above into your project's `.mcp.json` 
 To remove plugin, .NET global tool, host-config entries, discovery files, and ToolBaker cache in one pass:
 
 ```powershell
-pwsh uninstall-all.ps1 -WhatIf    # preview what will be removed
-pwsh uninstall-all.ps1            # interactive confirm, then execute
-pwsh uninstall-all.ps1 -Yes       # skip prompt
-pwsh uninstall-all.ps1 -KeepLogs  # preserve *.log and *.jsonl files
+pwsh .\uninstall-all.ps1 -WhatIf    # preview what will be removed
+pwsh .\uninstall-all.ps1            # interactive confirm, then execute
+pwsh .\uninstall-all.ps1 -Yes       # skip prompt
+pwsh .\uninstall-all.ps1 -KeepLogs  # preserve *.log and *.jsonl files
 ```
 
 Notes:
@@ -218,10 +225,9 @@ See [AGENTS.md](AGENTS.md) for exact config paths, schemas, dry-run expectations
 
 ---
 
-<!-- TODO v0.2: add demo.gif above this section -->
 ## Quickstart — 5 minutes to first tool call
 
-1. `dotnet tool install -g Bimwright.Rvt.Server` + `pwsh install.ps1`.
+1. Install or update `Bimwright.Rvt.Server`, download the plugin bundle, then run `install.ps1` from the extracted folder.
 2. Open Revit, go to **Add-Ins → BIMwright**, then click the MCP toggle button.
 3. In your MCP client, run `tools/list` — you should see the default toolsets (`query`, `create`, `view`, `meta`, `lint`).
 4. Call `get_current_view_info` — you'll get back a DTO like:
