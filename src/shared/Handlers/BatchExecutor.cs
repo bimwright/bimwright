@@ -25,10 +25,15 @@ namespace Bimwright.Rvt.Plugin.Handlers
         /// (success, dataOrError). Implementations wrap the real dispatcher in the handler;
         /// tests wrap a dictionary-backed stub.
         /// </param>
+        /// <param name="isBakedCommand">
+        /// Optional predicate used by the Revit handler to keep baked tools out of
+        /// batch_execute; baked tools must run through run_baked_tool.
+        /// </param>
         public static Outcome Run(
             JArray commandsArr,
             bool continueOnError,
-            Func<string, string, InvokeResult> invoke)
+            Func<string, string, InvokeResult> invoke,
+            Func<string, bool> isBakedCommand = null)
         {
             if (commandsArr == null) throw new ArgumentNullException(nameof(commandsArr));
             if (invoke == null) throw new ArgumentNullException(nameof(invoke));
@@ -52,6 +57,22 @@ namespace Bimwright.Rvt.Plugin.Handlers
                 if (string.Equals(cmdName, "batch_execute", StringComparison.Ordinal))
                 {
                     outcome.Results.Add(new { index = i, ok = false, error = "Nested batch_execute is not supported." });
+                    outcome.AnyFailed = true;
+                    if (!continueOnError) return outcome;
+                    continue;
+                }
+
+                if (string.Equals(cmdName, "run_baked_tool", StringComparison.Ordinal))
+                {
+                    outcome.Results.Add(new { index = i, ok = false, error = RunBakedToolNotSupportedMessage() });
+                    outcome.AnyFailed = true;
+                    if (!continueOnError) return outcome;
+                    continue;
+                }
+
+                if (isBakedCommand != null && isBakedCommand(cmdName))
+                {
+                    outcome.Results.Add(new { index = i, ok = false, error = BakedCommandNotSupportedMessage(cmdName) });
                     outcome.AnyFailed = true;
                     if (!continueOnError) return outcome;
                     continue;
@@ -93,6 +114,12 @@ namespace Bimwright.Rvt.Plugin.Handlers
 
             return outcome;
         }
+
+        public static string BakedCommandNotSupportedMessage(string name) =>
+            $"Baked tool '{name}' cannot be run through batch_execute. Use run_baked_tool instead.";
+
+        public static string RunBakedToolNotSupportedMessage() =>
+            "run_baked_tool cannot be invoked through batch_execute; call run_baked_tool directly.";
 
         public class InvokeResult
         {

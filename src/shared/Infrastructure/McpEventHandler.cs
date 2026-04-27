@@ -49,7 +49,7 @@ namespace Bimwright.Rvt.Plugin
                     if (command == null)
                     {
                         sw.Stop();
-                        var unknownError = ErrorSanitizer.Sanitize($"Unknown command: {request.CommandName}");
+                        var unknownError = McpResponsePrivacy.RedactErrorForResponse($"Unknown command: {request.CommandName}");
                         McpLogger.Log(request.CommandName, request.ParamsJson, false,
                                       sw.ElapsedMilliseconds, unknownError);
                         _sessionLog?.Add(new McpCallEntry
@@ -76,7 +76,7 @@ namespace Bimwright.Rvt.Plugin
                     if (!validation.IsValid)
                     {
                         sw.Stop();
-                        var validationError = ErrorSanitizer.Sanitize(validation.Error);
+                        var validationError = McpResponsePrivacy.RedactErrorForResponse(validation.Error);
                         McpLogger.Log(request.CommandName, request.ParamsJson, false,
                                       sw.ElapsedMilliseconds, validationError);
                         _sessionLog?.Add(new McpCallEntry
@@ -103,6 +103,7 @@ namespace Bimwright.Rvt.Plugin
 
                     var result = command.Execute(app, request.ParamsJson);
                     sw.Stop();
+                    var responseData = McpResponsePrivacy.RedactDataForResponse(request.CommandName, result.Data);
 
                     string codeSnippet = null;
                     if (request.CommandName == "send_code_to_revit")
@@ -116,12 +117,16 @@ namespace Bimwright.Rvt.Plugin
                     try { resultJson = result.Data != null ? JsonConvert.SerializeObject(result.Data) : null; }
                     catch { }
 
-                    // Truncate for session log (max 10KB)
-                    string sessionResult = resultJson != null && resultJson.Length > 10240
-                        ? resultJson.Substring(0, 10240)
-                        : resultJson;
+                    string responseResultJson = null;
+                    try { responseResultJson = responseData != null ? JsonConvert.SerializeObject(responseData) : null; }
+                    catch { }
 
-                    var resultError = ErrorSanitizer.Sanitize(result.Error);
+                    // Truncate for session log (max 10KB)
+                    string sessionResult = responseResultJson != null && responseResultJson.Length > 10240
+                        ? responseResultJson.Substring(0, 10240)
+                        : responseResultJson;
+
+                    var resultError = McpResponsePrivacy.RedactErrorForResponse(result.Error);
                     McpLogger.Log(request.CommandName, request.ParamsJson, result.Success,
                                   sw.ElapsedMilliseconds, resultError, codeSnippet, resultJson);
 
@@ -143,7 +148,7 @@ namespace Bimwright.Rvt.Plugin
                     {
                         id = request.Id,
                         success = result.Success,
-                        data = result.Data,
+                        data = responseData,
                         error = resultError
                     });
 
@@ -161,7 +166,7 @@ namespace Bimwright.Rvt.Plugin
                 catch (Exception ex)
                 {
                     sw.Stop();
-                    var exError = ErrorSanitizer.Sanitize(ex.Message);
+                    var exError = McpResponsePrivacy.RedactErrorForResponse(ex.Message);
                     McpLogger.Log(request.CommandName, request.ParamsJson, false,
                                   sw.ElapsedMilliseconds, exError);
                     _sessionLog?.Add(new McpCallEntry

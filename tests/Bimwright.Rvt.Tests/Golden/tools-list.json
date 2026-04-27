@@ -1,6 +1,6 @@
 {
   "generated_by": "ToolsListSnapshotTests",
-  "tool_count": 33,
+  "tool_count": 32,
   "tools": [
     {
       "name": "ai_element_filter",
@@ -85,36 +85,6 @@
       "inputSchema": {
         "properties": {},
         "required": [],
-        "type": "object"
-      }
-    },
-    {
-      "name": "bake_tool",
-      "description_hash": "sha256:cc39ec5adde36ec490970863d124de99bdae6229f442cccee731de47bde75a59",
-      "inputSchema": {
-        "properties": {
-          "code": {
-            "description": "",
-            "type": "String"
-          },
-          "description": {
-            "description": "",
-            "type": "String"
-          },
-          "name": {
-            "description": "",
-            "type": "String"
-          },
-          "parametersSchema": {
-            "description": "",
-            "type": "String"
-          }
-        },
-        "required": [
-          "name",
-          "description",
-          "code"
-        ],
         "type": "object"
       }
     },
@@ -561,7 +531,7 @@
           },
           "params": {
             "description": "",
-            "type": "String"
+            "type": "Object"
           }
         },
         "required": [

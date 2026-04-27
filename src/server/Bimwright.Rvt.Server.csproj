@@ -33,6 +33,10 @@
   <!-- Shared config (A9) — pulled in as source so server binary has zero extra deps -->
   <ItemGroup>
     <Compile Include="..\shared\Config\BimwrightConfig.cs" Link="Shared\BimwrightConfig.cs" />
+    <Compile Include="..\shared\Security\BakeRedactor.cs" Link="Shared\BakeRedactor.cs" />
+    <Compile Include="..\shared\Security\SecretMasker.cs" Link="Shared\SecretMasker.cs" />
+    <Compile Include="..\shared\ToolBaker\BakedToolRecord.cs" Link="Shared\BakedToolRecord.cs" />
+    <Compile Include="..\shared\ToolBaker\BakedToolRuntimeSource.cs" Link="Shared\BakedToolRuntimeSource.cs" />
   </ItemGroup>
 
   <!-- Expose internal helpers (ParseCsv, ApplyCliArgs, ApplyEnvVars, Load overloads, etc.)
@@ -44,6 +48,7 @@
   <ItemGroup>
     <PackageReference Include="ModelContextProtocol" Version="1.1.0" />
     <PackageReference Include="ModelContextProtocol.AspNetCore" Version="1.1.0" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.11" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
   </ItemGroup>

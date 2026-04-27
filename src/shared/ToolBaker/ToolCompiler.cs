@@ -7,6 +7,15 @@ using Microsoft.CodeAnalysis.CSharp;
 
 namespace Bimwright.Rvt.Plugin.ToolBaker
 {
+    public sealed class ToolCompileResult
+    {
+        public bool Success { get; set; }
+        public IRevitCommand Command { get; set; }
+        public string Error { get; set; }
+        public string[] Diagnostics { get; set; } = new string[0];
+        public byte[] AssemblyBytes { get; set; }
+    }
+
     public static class ToolCompiler
     {
         /// <summary>
@@ -59,7 +68,20 @@ public class BakedTool_{safeName} : IRevitCommand
         /// </summary>
         public static IRevitCommand CompileAndLoad(string sourceCode, out string error)
         {
-            error = null;
+            byte[] assemblyBytes;
+            return CompileAndLoad(sourceCode, out error, out assemblyBytes);
+        }
+
+        public static IRevitCommand CompileAndLoad(string sourceCode, out string error, out byte[] assemblyBytes)
+        {
+            var result = Compile(sourceCode);
+            error = result.Error;
+            assemblyBytes = result.AssemblyBytes;
+            return result.Command;
+        }
+
+        public static ToolCompileResult Compile(string sourceCode)
+        {
             try
             {
                 var syntaxTree = CSharpSyntaxTree.ParseText(sourceCode);
@@ -79,6 +101,17 @@ public class BakedTool_{safeName} : IRevitCommand
                     .Cast<MetadataReference>()
                     .ToArray();
 
+                var policy = BakeCompilerPolicy.Validate(sourceCode, references);
+                if (!policy.Allowed)
+                {
+                    return new ToolCompileResult
+                    {
+                        Success = false,
+                        Error = policy.Error,
+                        Diagnostics = new[] { policy.Error }
+                    };
+                }
+
                 var compilation = CSharpCompilation.Create(
                     "BakedTool_" + Guid.NewGuid().ToString("N").Substring(0, 8),
                     new[] { syntaxTree },
@@ -95,12 +128,16 @@ public class BakedTool_{safeName} : IRevitCommand
                             .Select(d => d.ToString())
                             .Take(5)
                             .ToArray();
-                        error = "Compilation failed:\n" + string.Join("\n", errors);
-                        return null;
+                        return new ToolCompileResult
+                        {
+                            Success = false,
+                            Error = "Compilation failed:\n" + string.Join("\n", errors),
+                            Diagnostics = errors
+                        };
                     }
 
-                    ms.Seek(0, SeekOrigin.Begin);
-                    var assembly = Assembly.Load(ms.ToArray());
+                    var bytes = ms.ToArray();
+                    var assembly = Assembly.Load(bytes);
 
                     // Find the IRevitCommand implementation
                     var commandType = assembly.GetTypes()
@@ -108,17 +145,31 @@ public class BakedTool_{safeName} : IRevitCommand
 
                     if (commandType == null)
                     {
-                        error = "Compiled assembly does not contain an IRevitCommand implementation.";
-                        return null;
+                        return new ToolCompileResult
+                        {
+                            Success = false,
+                            Error = "Compiled assembly does not contain an IRevitCommand implementation.",
+                            Diagnostics = new[] { "No IRevitCommand implementation was found." },
+                            AssemblyBytes = bytes
+                        };
                     }
 
-                    return (IRevitCommand)Activator.CreateInstance(commandType);
+                    return new ToolCompileResult
+                    {
+                        Success = true,
+                        Command = (IRevitCommand)Activator.CreateInstance(commandType),
+                        AssemblyBytes = bytes
+                    };
                 }
             }
             catch (Exception ex)
             {
-                error = $"Compilation error: {ex.Message}";
-                return null;
+                return new ToolCompileResult
+                {
+                    Success = false,
+                    Error = $"Compilation error: {ex.Message}",
+                    Diagnostics = new[] { ex.GetType().Name + ": " + ex.Message }
+                };
             }
         }
 

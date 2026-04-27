@@ -36,7 +36,7 @@
 - **纯 C#，Apache-2.0。** 跑 Revit 的机器上不需要装 Node.js。License 对企业友好，依赖树 audit 干净。
 - **原子 batch。** `batch_execute` 把一串命令包在一个 `TransactionGroup` 里。一个 undo step。batch 里任何一个命令挂了，整个 batch 回滚 — 不会出现"改了一半"的状态。
 - **弱模型不会被淹。** `--toolsets` + `--read-only` 控制 agent 看得到什么。Haiku 这种小模型不需要知道有 `delete_element` 这个 tool，如果你只是让它拉个 quantity。
-- **ToolBaker，opt-in。** 内置 tool 不够用的时候，model 可以自己写一个 C# tool，通过 Roslyn 编译，runtime 注册进来。默认关着的 — 想用就加 `--enable-toolbaker`。
+- **ToolBaker，opt-in。** 内置 tool 不够用的时候，model 可以自己写一个 C# tool，通过 Roslyn 编译，再由 baked-tool runtime 加载。公开 toolset 不在默认 surface 里；需要时显式 request `toolbaker`。
 
 ---
 
@@ -99,7 +99,7 @@ rvt-mcp/
 │   ├── shared/                   # 所有 plugin shell 共用的源码 glob
 │   │   ├── Handlers/             # 每个 tool 一个文件（create_grid, send_code, …）
 │   │   ├── Commands/             # Revit ribbon 命令
-│   │   ├── ToolBaker/            # 自演化引擎（bake_tool, run_baked_tool）
+│   │   ├── ToolBaker/            # 自演化引擎（baked-tool registry/runtime）
 │   │   ├── Transport/            # TCP (R22–R24) + Named Pipe (R25–R27) 抽象
 │   │   ├── Infrastructure/       # CommandDispatcher、ExternalEvent marshalling
 │   │   └── Security/             # Auth token、密钥掩码
@@ -255,7 +255,7 @@ pwsh uninstall-all.ps1 -KeepLogs  # 保留 *.log 和 *.jsonl
 | `annotation` | `tag_all_rooms`, `tag_all_walls` | off |
 | `export` | `export_room_data` | off |
 | `mep` | `detect_system_elements` | off |
-| `toolbaker` | `bake_tool`, `list_baked_tools`, `run_baked_tool`, `send_code_to_revit` *(仅 Debug)* | off |
+| `toolbaker` | `list_baked_tools`, `run_baked_tool`, `send_code_to_revit` *(需要 plugin env/config opt-in)* | off |
 
 用 `--toolsets query,create,modify,meta` 或 `--toolsets all` 打开。加 `--read-only` 会不管你 request 了什么都把 `create`/`modify`/`delete` 剥掉。
 
@@ -285,13 +285,12 @@ pwsh uninstall-all.ps1 -KeepLogs  # 保留 *.log 和 *.jsonl
 | `annotation` | `tag_all_walls` | 在 midpoint 给墙打 wall-type tag（跳过已有 tag 的）。 |
 | `annotation` | `tag_all_rooms` | 在 location point 打 room tag（跳过已有 tag 的）。 |
 | `mep` | `detect_system_elements` | 从一个 seed 沿 connector 遍历，返回 system 成员。 |
-| `toolbaker` | `send_code_to_revit` | 在 Revit 里跑临时 C# 代码（最后手段；仅 Debug build）。 |
-| `toolbaker` | `bake_tool` | 从 C# 源码注册一个持久 tool。 |
+| `toolbaker` | `send_code_to_revit` | plugin 可见的 adaptive bake opt-in 打开后，在 Revit 里跑临时 C# 代码。 |
 | `toolbaker` | `list_baked_tools` | 列出已注册的 baked tool。 |
 | `toolbaker` | `run_baked_tool` | 按名字调用 baked tool。 |
 | `meta` | `show_message` | 在 Revit 里弹 TaskDialog — 测连接、通知用户。 |
 | `meta` | `batch_execute` | 在一个 TransactionGroup 里原子执行 N 个命令（一次 undo）。 |
-| `meta` | `analyze_usage_patterns` | SQLite stats：tool 调用次数、session、error（最近 N 天）。 |
+| `meta` | `analyze_usage_patterns` | Usage stats：tool 调用次数、session、error（最近 N 天）。 |
 | `lint` | `analyze_view_naming_patterns` | 推断视图命名主导模式 + 覆盖率 + 偏离项。 |
 | `lint` | `suggest_view_name_corrections` | 为偏离的视图名称建议修正（inferred 或 profile）。 |
 | `lint` | `detect_firm_profile` | 指纹项目命名，匹配 firm-profile 库。 |
@@ -348,17 +347,17 @@ JSON 文件路径：`%LOCALAPPDATA%\Bimwright\bimwright.config.json`。
 
 通用 tool 就是通用。你的真实 BIM 工作不是 — 你有自己的命名规则，自己的 QA 步骤，自己的 export pipeline。每个 session，agent 要 stitch 8–10 个 primitive call 来做同一件事，每次都要烧 token。这事烦得够我做一条出路。
 
-你用一句人话描述 workflow。Model 写一个 C# handler，`bake_tool` 通过 Roslyn 编译进一个隔离的 `AssemblyLoadContext`，SQLite 持久化。下个 session — 这个 workflow 就是一个 call。
+你用一句人话描述 workflow。经过 review 的 C# handler 可以持久化到本地 baked-tool registry，并由 baked-tool runtime 加载。下个 session — 这个 workflow 就是一个 call。
 
 流程：
 
 1. 描述真实的 dataflow，比如 *"按 fire rating schedule 所有门，标出 fail 的，导出 CSV"*。
-2. Model 按 `IRevitCommand` contract 写 handler。
-3. `bake_tool` 通过 Roslyn 编译，link 到 live Revit API，load 进 sandboxed assembly context。
-4. SQLite 持久化。之后每个 session 都会自动注册。
-5. Call 它的方式和内置 tool 一样 — 同样的 schema validation，同样的 transaction safety。
+2. Model 按 `IRevitCommand` contract 写 handler，供你 review。
+3. 已接受的 handler source 通过 Roslyn 编译，link 到 live Revit API，然后 load 到 baked-command runtime。
+4. 本地 registry 持久化已接受的 handler。之后的 session 会重新加载。
+5. 通过 `run_baked_tool` 调用 — 同样的 schema validation，同样的 transaction safety。
 
-通过 `--enable-toolbaker` 门控（默认关）。`send_code_to_revit` — 不 sandbox 的 escape hatch — 只在 Debug build 里有，release binary 物理上不能执行任意 C#。
+用 `--toolsets toolbaker` 或 `--toolsets all` 暴露 `run_baked_tool`。`send_code_to_revit` — 不 sandbox 的 escape hatch — 需要在 plugin 侧 opt in：Revit 进程环境里设置 `BIMWRIGHT_ENABLE_ADAPTIVE_BAKE=1`，或在 `%LOCALAPPDATA%\Bimwright\bimwright.config.json` 里设置 `"enableAdaptiveBake": true`。
 
 ---
 

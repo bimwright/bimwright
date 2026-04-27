@@ -52,7 +52,7 @@ namespace Bimwright.Rvt.Plugin.Handlers
                     return r.Success
                         ? BatchExecutor.InvokeResult.Ok(r.Data)
                         : BatchExecutor.InvokeResult.Fail(r.Error);
-                });
+                }, _dispatcher.IsBakedCommand);
 
                 bool rolledBack;
                 if (outcome.AnyFailed && !continueOnError)

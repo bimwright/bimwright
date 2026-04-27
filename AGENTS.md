@@ -34,6 +34,12 @@ This file is machine-readable install instructions for AI coding agents (Claude 
 
 If the user explicitly says "skip the prompts, just install" — still do gate 1 (preview) and gate 5 (verify), but collapse gates 2 and 3 into a single upfront approval. **Never silently skip preview or verify.**
 
+### Baked-tool routing
+
+When the user's request may match a personal baked tool, call list_baked_tools first.
+In v0.3.x baked tools never appear directly in native tools/list.
+Run accepted tools through run_baked_tool name=<tool_name>.
+
 ---
 
 ## Prerequisites (check first, stop if any are missing)

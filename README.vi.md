@@ -36,7 +36,7 @@ Vài thứ mình care:
 - **Pure C#, Apache-2.0.** Không cần Node.js trên máy chạy Revit. License enterprise-safe, dependency graph audit được.
 - **Batch atomic.** `batch_execute` gói cả list command trong 1 `TransactionGroup`. 1 undo step. Nếu 1 command trong batch fail thì cả batch rollback — không có chuyện stuck ở trạng thái nửa chừng.
 - **Model yếu không bị loãng.** `--toolsets` + `--read-only` kiểm soát cái model được thấy. Haiku-size không cần biết tới `delete_element` khi anh/chị chỉ hỏi quantity.
-- **ToolBaker, opt-in.** Khi built-in không đủ, model tự viết tool mới bằng C#, compile qua Roslyn, register luôn tại runtime. Mặc định tắt — bật bằng `--enable-toolbaker` nếu anh/chị muốn.
+- **ToolBaker, opt-in.** Khi built-in không đủ, model tự viết tool mới bằng C#, compile qua Roslyn, rồi load qua baked-tool runtime. Public toolset không nằm trong surface mặc định; request `toolbaker` rõ ràng khi cần.
 
 ---
 
@@ -99,7 +99,7 @@ rvt-mcp/
 │   ├── shared/                   # Source glob dùng chung cho mọi plugin shell
 │   │   ├── Handlers/             # Mỗi tool = 1 file (create_grid, send_code, …)
 │   │   ├── Commands/             # Ribbon command trong Revit
-│   │   ├── ToolBaker/            # Self-evolution engine (bake_tool, run_baked_tool)
+│   │   ├── ToolBaker/            # Self-evolution engine (registry/runtime cho baked tool)
 │   │   ├── Transport/            # TCP (R22–R24) + Named Pipe (R25–R27)
 │   │   ├── Infrastructure/       # CommandDispatcher, ExternalEvent marshalling
 │   │   └── Security/             # Auth token, secret masking
@@ -255,7 +255,7 @@ Compat matrix rộng hơn nằm trong roadmap v0.2.
 | `annotation` | `tag_all_rooms`, `tag_all_walls` | off |
 | `export` | `export_room_data` | off |
 | `mep` | `detect_system_elements` | off |
-| `toolbaker` | `bake_tool`, `list_baked_tools`, `run_baked_tool`, `send_code_to_revit` *(Debug only)* | off |
+| `toolbaker` | `list_baked_tools`, `run_baked_tool`, `send_code_to_revit` *(cần opt-in qua env/config của plugin)* | off |
 
 Bật bằng `--toolsets query,create,modify,meta` hoặc `--toolsets all`. Thêm `--read-only` để strip `create`/`modify`/`delete` bất kể request gì.
 
@@ -285,13 +285,12 @@ Bật bằng `--toolsets query,create,modify,meta` hoặc `--toolsets all`. Thê
 | `annotation` | `tag_all_walls` | Tag wall-type tại midpoint (bỏ qua wall đã tag). |
 | `annotation` | `tag_all_rooms` | Room tag tại location point (bỏ qua room đã tag). |
 | `mep` | `detect_system_elements` | Lần theo connector từ 1 seed, trả về member của system. |
-| `toolbaker` | `send_code_to_revit` | Chạy C# body ad-hoc trong Revit (last resort; Debug build only). |
-| `toolbaker` | `bake_tool` | Register 1 tool bền vững từ C# source. |
+| `toolbaker` | `send_code_to_revit` | Chạy C# body ad-hoc trong Revit sau khi plugin thấy opt-in adaptive bake. |
 | `toolbaker` | `list_baked_tools` | List tool đã bake. |
 | `toolbaker` | `run_baked_tool` | Gọi tool đã bake theo tên. |
 | `meta` | `show_message` | TaskDialog trong Revit — test connection, notify user. |
 | `meta` | `batch_execute` | Chạy N command atomic trong 1 TransactionGroup (1 undo). |
-| `meta` | `analyze_usage_patterns` | Stats từ SQLite: tool calls, session, error (N ngày gần nhất). |
+| `meta` | `analyze_usage_patterns` | Stats usage: tool calls, session, error (N ngày gần nhất). |
 | `lint` | `analyze_view_naming_patterns` | Suy ra mẫu đặt tên view chủ đạo + độ phủ + outliers. |
 | `lint` | `suggest_view_name_corrections` | Đề xuất tên view đã sửa cho outliers (inferred hoặc theo profile). |
 | `lint` | `detect_firm_profile` | Fingerprint naming của project, khớp với firm-profile library. |
@@ -348,17 +347,17 @@ JSON file: `%LOCALAPPDATA%\Bimwright\bimwright.config.json`.
 
 Tool generic thì generic. Task BIM thực của anh/chị không như vậy — có quy ước đặt tên riêng, có bước QA riêng, có pipeline export riêng. Mỗi session, agent phải stitch 8–10 primitive call để làm đúng cái workflow đó, và anh/chị đốt token mỗi lần. Mình bực đủ để xây đường thoát.
 
-Anh/chị mô tả workflow 1 lần bằng tiếng người. Model viết 1 handler C#, `bake_tool` compile qua Roslyn vào `AssemblyLoadContext` cô lập, SQLite persist. Session sau — workflow đó chỉ còn 1 call.
+Anh/chị mô tả workflow 1 lần bằng tiếng người. Một handler C# đã review có thể được persist trong local baked-tool registry và load qua baked-tool runtime. Session sau — workflow đó chỉ còn 1 call.
 
 Walkthrough:
 
 1. Mô tả dataflow thực, ví dụ *"schedule tất cả cửa theo fire rating, tag cái fail, export ra CSV"*.
-2. Model generate handler theo contract `IRevitCommand`.
-3. `bake_tool` compile qua Roslyn, link với Revit API live, load vào sandboxed assembly context.
-4. SQLite persist. Auto-register mỗi session sau.
-5. Call như tool built-in — cùng schema validation, cùng transaction safety.
+2. Model generate handler theo contract `IRevitCommand` để review.
+3. Handler source đã accept được compile qua Roslyn, link với Revit API live, rồi load vào baked-command runtime.
+4. Local registry persist handler đã accept. Các handler này được reload ở session sau.
+5. Call qua `run_baked_tool` — cùng schema validation, cùng transaction safety.
 
-Gate qua `--enable-toolbaker` (mặc định off). `send_code_to_revit` — escape hatch không sandbox — chỉ có trong Debug build, nên release binary không thể execute C# bừa được.
+Expose `run_baked_tool` bằng `--toolsets toolbaker` hoặc `--toolsets all`. `send_code_to_revit` — escape hatch không sandbox — cần opt-in ở phía plugin bằng `BIMWRIGHT_ENABLE_ADAPTIVE_BAKE=1` trong environment của process Revit hoặc `"enableAdaptiveBake": true` trong `%LOCALAPPDATA%\Bimwright\bimwright.config.json`.
 
 ---
 

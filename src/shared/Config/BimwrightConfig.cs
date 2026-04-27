@@ -9,7 +9,9 @@ namespace Bimwright.Rvt.Plugin
     /// <summary>
     /// A9 3-layer config (aspect #3 §A9). Single POCO read by both processes:
     /// Server consumes <see cref="Target"/> / <see cref="Toolsets"/> / <see cref="ReadOnly"/>;
-    /// Plugin consumes <see cref="AllowLanBind"/> / <see cref="EnableToolbaker"/>.
+    /// Plugin consumes <see cref="AllowLanBind"/> / <see cref="EnableToolbaker"/>;
+    /// ToolBaker adaptive services consume <see cref="EnableAdaptiveBake"/> /
+    /// <see cref="CacheSendCodeBodies"/>.
     ///
     /// Precedence (high → low): CLI args > env vars (BIMWRIGHT_*) > JSON file.
     /// Fields stay nullable so "not set" is distinguishable from "explicitly default-valued";
@@ -17,15 +19,19 @@ namespace Bimwright.Rvt.Plugin
     /// </summary>
     public class BimwrightConfig
     {
-        public const string EnvTarget            = "BIMWRIGHT_TARGET";
-        public const string EnvToolsets          = "BIMWRIGHT_TOOLSETS";
-        public const string EnvReadOnly          = "BIMWRIGHT_READ_ONLY";
-        public const string EnvAllowLanBind      = "BIMWRIGHT_ALLOW_LAN_BIND";
-        public const string EnvEnableToolbaker   = "BIMWRIGHT_ENABLE_TOOLBAKER";
+        public const string EnvTarget              = "BIMWRIGHT_TARGET";
+        public const string EnvToolsets            = "BIMWRIGHT_TOOLSETS";
+        public const string EnvReadOnly            = "BIMWRIGHT_READ_ONLY";
+        public const string EnvAllowLanBind        = "BIMWRIGHT_ALLOW_LAN_BIND";
+        public const string EnvEnableToolbaker     = "BIMWRIGHT_ENABLE_TOOLBAKER";
+        public const string EnvEnableAdaptiveBake  = "BIMWRIGHT_ENABLE_ADAPTIVE_BAKE";
+        public const string EnvCacheSendCodeBodies = "BIMWRIGHT_CACHE_SEND_CODE_BODIES";
 
-        public const bool DefaultReadOnly        = false;
-        public const bool DefaultAllowLanBind    = false;
-        public const bool DefaultEnableToolbaker = true;
+        public const bool DefaultReadOnly            = false;
+        public const bool DefaultAllowLanBind        = false;
+        public const bool DefaultEnableToolbaker     = true;
+        public const bool DefaultEnableAdaptiveBake  = false;
+        public const bool DefaultCacheSendCodeBodies = false;
 
         [JsonProperty("target")]
         public string Target { get; set; }
@@ -42,9 +48,17 @@ namespace Bimwright.Rvt.Plugin
         [JsonProperty("enableToolbaker")]
         public bool? EnableToolbaker { get; set; }
 
-        public bool ReadOnlyOrDefault        => ReadOnly        ?? DefaultReadOnly;
-        public bool AllowLanBindOrDefault    => AllowLanBind    ?? DefaultAllowLanBind;
-        public bool EnableToolbakerOrDefault => EnableToolbaker ?? DefaultEnableToolbaker;
+        [JsonProperty("enableAdaptiveBake")]
+        public bool? EnableAdaptiveBake { get; set; }
+
+        [JsonProperty("cacheSendCodeBodies")]
+        public bool? CacheSendCodeBodies { get; set; }
+
+        public bool ReadOnlyOrDefault              => ReadOnly           ?? DefaultReadOnly;
+        public bool AllowLanBindOrDefault          => AllowLanBind       ?? DefaultAllowLanBind;
+        public bool EnableToolbakerOrDefault       => EnableToolbaker    ?? DefaultEnableToolbaker;
+        public bool EnableAdaptiveBakeOrDefault    => EnableAdaptiveBake ?? DefaultEnableAdaptiveBake;
+        public bool CacheSendCodeBodiesOrDefault  => CacheSendCodeBodies ?? DefaultCacheSendCodeBodies;
 
         public static string DefaultConfigFilePath =>
             Path.Combine(
@@ -107,6 +121,12 @@ namespace Bimwright.Rvt.Plugin
 
             var enableBaker = ParseBool(lookup(EnvEnableToolbaker));
             if (enableBaker.HasValue) config.EnableToolbaker = enableBaker;
+
+            var adaptiveBake = ParseBool(lookup(EnvEnableAdaptiveBake));
+            if (adaptiveBake.HasValue) config.EnableAdaptiveBake = adaptiveBake;
+
+            var cacheBodies = ParseBool(lookup(EnvCacheSendCodeBodies));
+            if (cacheBodies.HasValue) config.CacheSendCodeBodies = cacheBodies;
         }
 
         internal static void ApplyCliArgs(BimwrightConfig config, string[] args)
@@ -134,6 +154,18 @@ namespace Bimwright.Rvt.Plugin
                         break;
                     case "--disable-toolbaker":
                         config.EnableToolbaker = false;
+                        break;
+                    case "--enable-adaptive-bake":
+                        config.EnableAdaptiveBake = true;
+                        break;
+                    case "--disable-adaptive-bake":
+                        config.EnableAdaptiveBake = false;
+                        break;
+                    case "--cache-send-code-bodies":
+                        config.CacheSendCodeBodies = true;
+                        break;
+                    case "--no-cache-send-code-bodies":
+                        config.CacheSendCodeBodies = false;
                         break;
                 }
             }

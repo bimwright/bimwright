@@ -76,10 +76,19 @@ namespace Bimwright.Rvt.Tests
         {
             var config = new BimwrightConfig();
             BimwrightConfig.ApplyCliArgs(config,
-                new[] { "--read-only", "--allow-lan-bind", "--enable-toolbaker" });
+                new[]
+                {
+                    "--read-only",
+                    "--allow-lan-bind",
+                    "--enable-toolbaker",
+                    "--enable-adaptive-bake",
+                    "--cache-send-code-bodies",
+                });
             Assert.True(config.ReadOnly);
             Assert.True(config.AllowLanBind);
             Assert.True(config.EnableToolbaker);
+            Assert.True(config.EnableAdaptiveBake);
+            Assert.True(config.CacheSendCodeBodies);
         }
 
         [Fact]
@@ -88,6 +97,19 @@ namespace Bimwright.Rvt.Tests
             var config = new BimwrightConfig();
             BimwrightConfig.ApplyCliArgs(config, new[] { "--disable-toolbaker" });
             Assert.False(config.EnableToolbaker);
+        }
+
+        [Fact]
+        public void ApplyCliArgs_AdaptiveBakeDisableFlagsSetFalse()
+        {
+            var config = new BimwrightConfig
+            {
+                EnableAdaptiveBake = true,
+                CacheSendCodeBodies = true,
+            };
+            BimwrightConfig.ApplyCliArgs(config, new[] { "--disable-adaptive-bake", "--no-cache-send-code-bodies" });
+            Assert.False(config.EnableAdaptiveBake);
+            Assert.False(config.CacheSendCodeBodies);
         }
 
         [Fact]
@@ -112,12 +134,16 @@ namespace Bimwright.Rvt.Tests
                 [BimwrightConfig.EnvReadOnly] = "true",
                 [BimwrightConfig.EnvAllowLanBind] = "1",
                 [BimwrightConfig.EnvEnableToolbaker] = "false",
+                [BimwrightConfig.EnvEnableAdaptiveBake] = "true",
+                [BimwrightConfig.EnvCacheSendCodeBodies] = "1",
             }));
             Assert.Equal("R27", config.Target);
             Assert.Equal(new[] { "query", "create" }, config.Toolsets);
             Assert.True(config.ReadOnly);
             Assert.True(config.AllowLanBind);
             Assert.False(config.EnableToolbaker);
+            Assert.True(config.EnableAdaptiveBake);
+            Assert.True(config.CacheSendCodeBodies);
         }
 
         [Fact]
@@ -160,7 +186,9 @@ namespace Bimwright.Rvt.Tests
                     ""target"":""R24"",
                     ""toolsets"":[""query"",""view""],
                     ""readOnly"":true,
-                    ""enableToolbaker"":false
+                    ""enableToolbaker"":false,
+                    ""enableAdaptiveBake"":true,
+                    ""cacheSendCodeBodies"":true
                 }");
                 var config = BimwrightConfig.LoadFromJsonFile(path);
                 Assert.NotNull(config);
@@ -169,6 +197,8 @@ namespace Bimwright.Rvt.Tests
                 Assert.True(config.ReadOnly);
                 Assert.Null(config.AllowLanBind); // absent → null
                 Assert.False(config.EnableToolbaker);
+                Assert.True(config.EnableAdaptiveBake);
+                Assert.True(config.CacheSendCodeBodies);
             }
             finally { File.Delete(path); }
         }
@@ -224,6 +254,8 @@ namespace Bimwright.Rvt.Tests
             Assert.False(config.ReadOnlyOrDefault);
             Assert.False(config.AllowLanBindOrDefault);
             Assert.True(config.EnableToolbakerOrDefault); // default ON per aspect #5
+            Assert.False(config.EnableAdaptiveBakeOrDefault);
+            Assert.False(config.CacheSendCodeBodiesOrDefault);
         }
 
         // --- OrDefault accessors ------------------------------------------
@@ -235,6 +267,8 @@ namespace Bimwright.Rvt.Tests
             Assert.False(config.ReadOnlyOrDefault);
             Assert.False(config.AllowLanBindOrDefault);
             Assert.True(config.EnableToolbakerOrDefault);
+            Assert.False(config.EnableAdaptiveBakeOrDefault);
+            Assert.False(config.CacheSendCodeBodiesOrDefault);
         }
 
         [Fact]
@@ -245,10 +279,14 @@ namespace Bimwright.Rvt.Tests
                 ReadOnly = true,
                 AllowLanBind = true,
                 EnableToolbaker = false,
+                EnableAdaptiveBake = true,
+                CacheSendCodeBodies = true,
             };
             Assert.True(config.ReadOnlyOrDefault);
             Assert.True(config.AllowLanBindOrDefault);
             Assert.False(config.EnableToolbakerOrDefault);
+            Assert.True(config.EnableAdaptiveBakeOrDefault);
+            Assert.True(config.CacheSendCodeBodiesOrDefault);
         }
     }
 }

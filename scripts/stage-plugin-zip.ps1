@@ -72,6 +72,8 @@ foreach ($s in $shells) {
     $patterns = @(
         'Bimwright.*.dll',
         'Newtonsoft.Json.dll',
+        'Microsoft.Data.Sqlite.dll',
+        'SQLitePCLRaw*.dll',
         'Microsoft.CodeAnalysis*.dll',
         'System.Collections.Immutable.dll',   # net48 only, harmless glob-miss on net8/10
         'System.Reflection.Metadata.dll'      # net48 only
@@ -85,6 +87,14 @@ foreach ($s in $shells) {
     $runtimesSrc = Join-Path $binDir 'runtimes'
     if (Test-Path $runtimesSrc) {
         Copy-Item -Path $runtimesSrc -Destination $destDir -Recurse -Force
+
+        # Revit add-ins are not launched by dotnet.exe, so native assets under
+        # runtimes/win-x64/native are not always resolved by the host. Keep a
+        # root copy beside Bimwright.Rvt.Plugin.dll for Microsoft.Data.Sqlite.
+        $nativeSqlite = Join-Path $runtimesSrc 'win-x64\native\e_sqlite3.dll'
+        if (Test-Path $nativeSqlite) {
+            Copy-Item -Path $nativeSqlite -Destination $destDir -Force
+        }
     }
 
     # Addin manifest at plugin root.

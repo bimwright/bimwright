@@ -18,9 +18,17 @@
   -->
   <ItemGroup>
     <Compile Include="..\..\src\shared\Security\ErrorSanitizer.cs" Link="Shared\ErrorSanitizer.cs" />
+    <Compile Include="..\..\src\shared\Security\McpResponsePrivacy.cs" Link="Shared\McpResponsePrivacy.cs" />
+    <Compile Include="..\..\src\shared\Logging\McpLogger.cs" Link="Shared\McpLogger.cs" />
+    <Compile Include="..\..\src\shared\Logging\McpSessionLog.cs" Link="Shared\McpSessionLog.cs" />
     <Compile Include="..\..\src\shared\Infrastructure\SchemaValidator.cs" Link="Shared\SchemaValidator.cs" />
     <Compile Include="..\..\src\shared\Infrastructure\ResponseSizeGuard.cs" Link="Shared\ResponseSizeGuard.cs" />
     <Compile Include="..\..\src\shared\Handlers\BatchExecutor.cs" Link="Shared\BatchExecutor.cs" />
+    <Compile Include="..\..\src\shared\ToolBaker\BakedToolRegistry.cs" Link="Shared\BakedToolRegistry.cs" />
+    <Compile Include="..\..\src\shared\ToolBaker\BakedToolParameterDefaults.cs" Link="Shared\BakedToolParameterDefaults.cs" />
+    <Compile Include="..\..\src\shared\ToolBaker\BakedToolRuntimeCache.cs" Link="Shared\BakedToolRuntimeCache.cs" />
+    <Compile Include="..\..\src\shared\ToolBaker\BakedToolDispatchAuthorizer.cs" Link="Shared\BakedToolDispatchAuthorizer.cs" />
+    <Compile Include="..\..\src\shared\ToolBaker\BakeCompilerPolicy.cs" Link="Shared\BakeCompilerPolicy.cs" />
     <Compile Include="..\..\src\shared\Lint\ViewNamingAnalyzer.cs" Link="Shared\ViewNamingAnalyzer.cs" />
     <Compile Include="..\..\src\shared\Lint\FirmProfile.cs" Link="Shared\FirmProfile.cs" />
     <Compile Include="..\..\src\shared\Lint\FirmProfileLibrary.cs" Link="Shared\FirmProfileLibrary.cs" />
@@ -32,6 +40,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.10.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="xunit" Version="2.9.0" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">

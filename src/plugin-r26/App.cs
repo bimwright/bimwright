@@ -1,6 +1,7 @@
 using System;
 using Autodesk.Revit.UI;
 using Autodesk.Revit.UI.Events;
+using Bimwright.Rvt.Plugin.Views;
 
 namespace Bimwright.Rvt.Plugin
 {
@@ -13,6 +14,8 @@ namespace Bimwright.Rvt.Plugin
         public McpSessionLog SessionLog { get; private set; }
         public CommandDispatcher CommandDispatcher => _dispatcher;
         public ToolBaker.BakedToolRegistry BakedToolRegistry { get; private set; }
+        public ToolBaker.BakedToolRuntimeCache BakedToolRuntimeCache { get; private set; }
+        public BimwrightConfig Config { get; private set; }
         public McpEventHandler EventHandler => _handler;
         public ExternalEvent ExternalEvent => _externalEvent;
 
@@ -20,6 +23,8 @@ namespace Bimwright.Rvt.Plugin
         private ExternalEvent _externalEvent;
         private CommandDispatcher _dispatcher;
         private IdlingUpdater _idlingUpdater;
+        private BakeInboxWindow _bakeInboxWindow;
+        private UIControlledApplication _ribbonApplication;
 
         public Result OnStartup(UIControlledApplication application)
         {
@@ -30,14 +35,14 @@ namespace Bimwright.Rvt.Plugin
 
             McpLogger.Initialize();
             SessionLog = new McpSessionLog();
+            Config = BimwrightConfig.Load(args: null);
             DebugLog("OnStartup: McpLogger + SessionLog OK");
 
-            _dispatcher = new CommandDispatcher();
-#if ALLOW_SEND_CODE
+            BakedToolRuntimeCache = new ToolBaker.BakedToolRuntimeCache();
+            _dispatcher = new CommandDispatcher(BakedToolRuntimeCache);
             BakedToolRegistry = new ToolBaker.BakedToolRegistry();
             _dispatcher.LoadBakedTools(BakedToolRegistry);
             DebugLog("OnStartup: BakedToolRegistry loaded");
-#endif
             _handler = new McpEventHandler(_dispatcher, SessionLog);
             _externalEvent = ExternalEvent.Create(_handler);
             DebugLog("OnStartup: Dispatcher + EventHandler + ExternalEvent OK");
@@ -45,7 +50,8 @@ namespace Bimwright.Rvt.Plugin
             CreateAndStartTransport();
             DebugLog("OnStartup: Transport OK");
 
-            var ribbonResult = RibbonSetup.Create(application);
+            _ribbonApplication = application;
+            var ribbonResult = RibbonSetup.Create(application, Config, BakedToolRuntimeCache);
             DebugLog("OnStartup: RibbonSetup OK");
 
             _idlingUpdater = new IdlingUpdater(ribbonResult);
@@ -58,6 +64,7 @@ namespace Bimwright.Rvt.Plugin
         public Result OnShutdown(UIControlledApplication application)
         {
             application.Idling -= OnIdling;
+            _bakeInboxWindow?.Close();
 
             StopTransport();
             _handler?.CancelAll();
@@ -119,6 +126,19 @@ namespace Bimwright.Rvt.Plugin
         {
             // History window is not yet implemented for Revit 2026.
             // ShowHistoryCommand calls this — stub to prevent compile error.
+        }
+
+        public void ShowOrFocusBakeInboxWindow()
+        {
+            if (_bakeInboxWindow == null || !_bakeInboxWindow.IsLoaded)
+                _bakeInboxWindow = new BakeInboxWindow(BakedToolRegistry, BakedToolRuntimeCache);
+            _bakeInboxWindow.ShowOrFocus();
+        }
+
+        public void RefreshBakedRibbonButtons()
+        {
+            if (Config?.EnableAdaptiveBakeOrDefault == true && _ribbonApplication != null)
+                RibbonSetup.AddOrUpdateBakedToolButtons(_ribbonApplication, BakedToolRuntimeCache);
         }
 
         private void OnIdling(object sender, IdlingEventArgs e)

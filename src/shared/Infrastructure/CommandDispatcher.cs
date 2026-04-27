@@ -6,9 +6,12 @@ namespace Bimwright.Rvt.Plugin
     public class CommandDispatcher
     {
         private readonly Dictionary<string, IRevitCommand> _commands = new Dictionary<string, IRevitCommand>();
+        private readonly Dictionary<string, IRevitCommand> _bakedCommands = new Dictionary<string, IRevitCommand>();
+        private readonly BakedToolRuntimeCache _runtimeCache;
 
-        public CommandDispatcher()
+        public CommandDispatcher(BakedToolRuntimeCache runtimeCache = null)
         {
+            _runtimeCache = runtimeCache;
             Register(new Handlers.ShowMessageHandler());
             Register(new Handlers.GetCurrentViewHandler());
             Register(new Handlers.GetSelectedElementsHandler());
@@ -48,8 +51,8 @@ namespace Bimwright.Rvt.Plugin
             Register(new Handlers.DetectFirmProfileHandler());
             // A6 batch execution — needs dispatcher ref to look up sub-commands
             Register(new Handlers.BatchExecuteHandler(this));
-            // ToolBaker (Debug only — gated by #if in handlers)
-            Register(new Handlers.BakeToolHandler());
+            // ToolBaker runtime access.
+            Register(new Handlers.ApplyBakeSuggestionHandler(runtimeCache));
             Register(new Handlers.ListBakedToolsHandler());
             Register(new Handlers.RunBakedToolHandler());
         }
@@ -59,10 +62,35 @@ namespace Bimwright.Rvt.Plugin
             _commands[command.Name] = command;
         }
 
+        public bool RegisterBaked(IRevitCommand command)
+        {
+            if (command == null || string.IsNullOrWhiteSpace(command.Name))
+                return false;
+
+            if (_commands.ContainsKey(command.Name))
+                return false;
+            if (_bakedCommands.ContainsKey(command.Name))
+                return false;
+
+            _bakedCommands[command.Name] = command;
+            return true;
+        }
+
         public IRevitCommand GetCommand(string name)
         {
             _commands.TryGetValue(name, out var command);
             return command;
+        }
+
+        public IRevitCommand GetBakedCommand(string name)
+        {
+            _bakedCommands.TryGetValue(name, out var command);
+            return command;
+        }
+
+        public bool IsBakedCommand(string name)
+        {
+            return !string.IsNullOrEmpty(name) && _bakedCommands.ContainsKey(name);
         }
 
         /// <summary>Load all baked tools from registry and register them.</summary>
@@ -70,13 +98,64 @@ namespace Bimwright.Rvt.Plugin
         {
             foreach (var meta in registry.GetAll())
             {
+                if (string.Equals(meta.LifecycleState, "archived", System.StringComparison.Ordinal))
+                    continue;
+
                 var source = registry.GetSource(meta.Name);
                 if (source == null) continue;
                 try
                 {
-                    var command = ToolCompiler.CompileAndLoad(source, out var error);
+                    IRevitCommand command;
+                    string error = null;
+                    if (BakedToolRuntimeSource.HasMarker(source))
+                    {
+                        if (!BakedToolRuntimeSource.IsAllowedForSuggestionSource(meta.Source))
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[Bimwright] Skipped baked tool '{meta.Name}': runtime source marker is not allowed for source '{meta.Source}'.");
+                            continue;
+                        }
+
+                        if (!BakedToolRuntimeCommandFactory.TryCreate(
+                            meta.Name,
+                            meta.Description,
+                            meta.ParametersSchema,
+                            source,
+                            this,
+                            out command,
+                            out error))
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[Bimwright] Failed to load baked tool '{meta.Name}': {error}");
+                            continue;
+                        }
+                    }
+                    else
+                    {
+                        command = ToolCompiler.CompileAndLoad(source, out error);
+                    }
+
                     if (command != null)
-                        Register(command);
+                    {
+                        if (!string.Equals(command.Name, meta.Name, System.StringComparison.Ordinal))
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[Bimwright] Skipped baked tool '{meta.Name}': compiled command name '{command.Name}' did not match registry metadata.");
+                            continue;
+                        }
+
+                        if (!RegisterBaked(command))
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[Bimwright] Skipped baked tool '{meta.Name}': command name collides with an existing command.");
+                        }
+                        else
+                        {
+                            _runtimeCache?.RegisterOrUpdate(new BakedToolRuntimeEntry(
+                                meta.Name,
+                                meta.DisplayName,
+                                meta.Description,
+                                meta.ParametersSchema,
+                                meta.OutputChoice,
+                                command));
+                        }
+                    }
                     else
                         System.Diagnostics.Debug.WriteLine($"[Bimwright] Failed to load baked tool '{meta.Name}': {error}");
                 }

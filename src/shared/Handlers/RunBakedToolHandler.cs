@@ -1,4 +1,5 @@
 using Autodesk.Revit.UI;
+using Bimwright.Rvt.Plugin.ToolBaker;
 using Newtonsoft.Json.Linq;
 
 namespace Bimwright.Rvt.Plugin.Handlers
@@ -11,9 +12,6 @@ namespace Bimwright.Rvt.Plugin.Handlers
 
         public CommandResult Execute(UIApplication app, string paramsJson)
         {
-#if !ALLOW_SEND_CODE
-            return CommandResult.Fail("Baked tools are disabled in this build.");
-#else
             var request = JObject.Parse(paramsJson);
             var name = request.Value<string>("name");
             if (string.IsNullOrWhiteSpace(name))
@@ -23,19 +21,34 @@ namespace Bimwright.Rvt.Plugin.Handlers
             if (dispatcher == null)
                 return CommandResult.Fail("CommandDispatcher not available.");
 
-            var command = dispatcher.GetCommand(name);
-            if (command == null)
-                return CommandResult.Fail($"Baked tool '{name}' not found. Use list_baked_tools to see available tools.");
+            var registry = App.Instance?.BakedToolRegistry;
+            var command = dispatcher.GetBakedCommand(name);
+            if (!BakedToolDispatchAuthorizer.TryAuthorize(registry, name, command != null, out var authError))
+                return CommandResult.Fail(authError);
 
             var toolParams = request["params"]?.ToString() ?? "{}";
+            var meta = registry.GetMeta(name);
+            if (!BakedToolDispatchAuthorizer.TryValidateParameters(meta, toolParams, out var paramError))
+                return CommandResult.Fail(paramError);
+
+            var revitVersion = AuthToken.RevitVersion ?? string.Empty;
+            BakedToolDispatchAuthorizer.TryGetCompatWarning(meta, revitVersion, out var compatWarning);
+
             var result = command.Execute(app, toolParams);
+            registry.RecordRun(name, revitVersion, result != null && result.Success, result?.Error);
 
-            // Count only successful invocations so CallCount reflects real usage, not retries against a buggy tool.
-            if (result != null && result.Success)
-                App.Instance.BakedToolRegistry?.IncrementCallCount(name);
+            if (result == null)
+                return CommandResult.Fail("Baked tool returned null.");
+            if (!result.Success)
+                return result;
 
-            return result;
-#endif
+            return CommandResult.Ok(new
+            {
+                tool_name = name,
+                revit_version = revitVersion,
+                compat_warning = compatWarning,
+                result = result.Data
+            });
         }
     }
 }
