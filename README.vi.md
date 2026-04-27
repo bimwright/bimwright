@@ -132,16 +132,23 @@ dotnet tool install -g Bimwright.Rvt.Server
 bimwright-rvt --help
 ```
 
-Cần .NET 8 SDK trên máy chạy MCP client.
+Cần .NET 8 SDK trên máy chạy MCP client. Nếu tool đã cài sẵn, chạy `dotnet tool update -g Bimwright.Rvt.Server` thay vì install.
 
 ### 2. Plugin — Revit add-in
 
-Tải latest release từ [GitHub Releases](https://github.com/bimwright/rvt-mcp/releases/latest). Giải nén và chạy:
+Tải plugin installer bundle từ [GitHub Releases](https://github.com/bimwright/rvt-mcp/releases/latest). Bundle có tên `bimwright-rvt-plugin-<tag>.zip`, bên trong có `install.ps1`, `uninstall-all.ps1` và 6 ZIP plugin cho từng năm Revit.
 
 ```powershell
-pwsh install.ps1            # detect tất cả năm Revit đã cài
-pwsh install.ps1 -WhatIf    # preview, không thay đổi
-pwsh install.ps1 -Uninstall # gỡ sạch
+$tag = (Invoke-RestMethod https://api.github.com/repos/bimwright/rvt-mcp/releases/latest).tag_name
+$zip = "$env:TEMP\bimwright-rvt-plugin-$tag.zip"
+$dir = "$env:TEMP\bimwright-rvt-plugin-$tag"
+Invoke-WebRequest "https://github.com/bimwright/rvt-mcp/releases/download/$tag/bimwright-rvt-plugin-$tag.zip" -OutFile $zip
+Expand-Archive $zip -DestinationPath $dir -Force
+Set-Location $dir
+
+pwsh .\install.ps1 -SourceDir . -WhatIf    # preview, không thay đổi
+pwsh .\install.ps1 -SourceDir .            # detect tất cả năm Revit đã cài
+pwsh .\install.ps1 -Uninstall              # chỉ gỡ plugin
 ```
 
 Script detect các version Revit đã cài qua `HKLM:\SOFTWARE\Autodesk\Revit\` và copy plugin tương ứng vào `%APPDATA%\Autodesk\Revit\Addins\<year>\Bimwright\`.
@@ -168,9 +175,9 @@ Bỏ flag `--target` thì Bimwright auto-detect Revit đang chạy qua discovery
 Thay vì sửa tay `opencode.json` hoặc `~/.codex/config.toml`, chạy:
 
 ```powershell
-pwsh install.ps1 -WireClient opencode      # ghi entry vào %USERPROFILE%\.config\opencode\opencode.json
-pwsh install.ps1 -WireClient codex         # ghi entry vào %USERPROFILE%\.codex\config.toml
-pwsh install.ps1 -WireClient opencode -WhatIf   # xem trước
+pwsh .\install.ps1 -SourceDir . -WireClient opencode      # ghi entry vào %USERPROFILE%\.config\opencode\opencode.json
+pwsh .\install.ps1 -SourceDir . -WireClient codex         # ghi entry vào %USERPROFILE%\.codex\config.toml
+pwsh .\install.ps1 -SourceDir . -WireClient opencode -WhatIf   # xem trước
 ```
 
 Script sẽ:
@@ -187,10 +194,10 @@ Người dùng Claude Code: dán đoạn JSON ở trên vào `.mcp.json` của p
 Xóa plugin, .NET global tool, entry trong config của host, discovery file và ToolBaker cache trong 1 lần:
 
 ```powershell
-pwsh uninstall-all.ps1 -WhatIf    # xem trước những gì sẽ bị xóa
-pwsh uninstall-all.ps1            # xác nhận tương tác rồi thực thi
-pwsh uninstall-all.ps1 -Yes       # skip prompt
-pwsh uninstall-all.ps1 -KeepLogs  # giữ file *.log và *.jsonl
+pwsh .\uninstall-all.ps1 -WhatIf    # xem trước những gì sẽ bị xóa
+pwsh .\uninstall-all.ps1            # xác nhận tương tác rồi thực thi
+pwsh .\uninstall-all.ps1 -Yes       # skip prompt
+pwsh .\uninstall-all.ps1 -KeepLogs  # giữ file *.log và *.jsonl
 ```
 
 Lưu ý:
@@ -206,22 +213,25 @@ Lưu ý:
 
 | Client | Trạng thái | Ghi chú |
 |--------|-----------|---------|
-| Claude Code CLI | ✅ verified | target test chính |
-| Claude Desktop | ✅ verified | entry trong `.mcp.json` |
-| Cursor | ⏳ pending verification | stdio; dự kiến work |
-| Cline (VS Code) | ⏳ pending verification | stdio; dự kiến work |
-| MCP client khác | ⏳ pending | mở issue nếu anh/chị thử |
+| Claude Code CLI | documented | project `.mcp.json` hoặc global `~/.claude.json` |
+| Claude Desktop | documented | `%APPDATA%\Claude\claude_desktop_config.json` |
+| OpenCode | scripted | `install.ps1 -WireClient opencode` |
+| Codex | scripted | `install.ps1 -WireClient codex` |
+| Cursor | documented | project hoặc user `mcp.json` |
+| Cline (VS Code) | documented | Cline MCP settings JSON |
+| VS Code Copilot | documented | native `servers` schema với `type: stdio` |
+| Gemini CLI | documented | `gemini mcp add ...` hoặc settings JSON |
+| Antigravity | documented | Gemini/Antigravity MCP config JSON |
 
-Compat matrix rộng hơn nằm trong roadmap v0.2.
+Xem [AGENTS.md](AGENTS.md) để biết đường dẫn config, schema, dry-run và rollback cho từng host.
 
 ---
 
-<!-- TODO v0.2: add demo.gif above this section -->
 ## Quickstart — 5 phút cho tool call đầu tiên
 
-1. `dotnet tool install -g Bimwright.Rvt.Server` + `pwsh install.ps1`.
+1. Install hoặc update `Bimwright.Rvt.Server`, tải plugin bundle, rồi chạy `install.ps1` trong thư mục đã giải nén.
 2. Mở Revit, vào **Add-Ins → BIMwright**, rồi bấm nút toggle MCP.
-3. Trong MCP client, chạy `tools/list` — sẽ thấy các toolset mặc định (`query`, `create`, `view`, `meta`).
+3. Trong MCP client, chạy `tools/list` — sẽ thấy các toolset mặc định (`query`, `create`, `view`, `meta`, `lint`).
 4. Call `get_current_view_info` — nhận về DTO kiểu:
    ```json
    { "viewName": "Level 1", "viewType": "FloorPlan", "levelName": "Level 1", "scale": 100 }
