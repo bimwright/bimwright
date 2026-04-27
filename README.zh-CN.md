@@ -24,7 +24,7 @@
 
 你肯定遇到过这种场景：下午 5 点，BIM 经理发消息过来 *"按新标准把所有东西重命名一下"* — L01 - 地下室、L02 - 商业层、一路下去。模型里几千个 element。手动点不现实。写个 Dynamo 脚本又要花半天。这就是那个痒点。
 
-**rvt-mcp** 是一个和 Revit 2022–2027 一起跑的 add-in。你告诉 Claude（或者 Cursor、Codex、OpenCode — 哪个 agent 都行）你要做什么，它调用 29 个 tool 里的某一个，Revit 在一个 transaction 里把事情做完。不满意？**Ctrl+Z** — 一步，全部回滚。
+**rvt-mcp** 是一个和 Revit 2022–2027 一起跑的 add-in。你告诉 Claude（或者 Cursor、Codex、OpenCode — 哪个 agent 都行）你要做什么，它调用 32 个本地 tool 里的某一个，Revit 在一个 transaction 里把事情做完。不满意？**Ctrl+Z** — 一步，全部回滚。
 
 不上云，什么都不离开你的机器。Apache-2.0，纯 C#。
 
@@ -32,11 +32,11 @@
 
 我比较在意的几点：
 
-- **Revit 2022 到 2027 全覆盖。** 一套代码，六个 plugin shell（.NET 4.8 → .NET 10）。R22 和 R27 是 compile-evidence ship 的 — 只在 R23–R26 上 runtime-verified 过 4/4。stack 跟 R23、R26 一样，说实话我挺有把握它能跑，但没跑过的我就不叫 verified。
+- **Revit 2022 到 2027 全覆盖。** 一套代码，六个 plugin shell（.NET 4.8 → .NET 10）。Compile gate 6/6，R23–R26 有 core runtime coverage，accepted ToolBaker path 已经在 R22、R26、R27 smoke-tested。
 - **纯 C#，Apache-2.0。** 跑 Revit 的机器上不需要装 Node.js。License 对企业友好，依赖树 audit 干净。
 - **原子 batch。** `batch_execute` 把一串命令包在一个 `TransactionGroup` 里。一个 undo step。batch 里任何一个命令挂了，整个 batch 回滚 — 不会出现"改了一半"的状态。
 - **弱模型不会被淹。** `--toolsets` + `--read-only` 控制 agent 看得到什么。Haiku 这种小模型不需要知道有 `delete_element` 这个 tool，如果你只是让它拉个 quantity。
-- **ToolBaker，opt-in。** 内置 tool 不够用的时候，model 可以自己写一个 C# tool，通过 Roslyn 编译，再由 baked-tool runtime 加载。公开 toolset 不在默认 surface 里；需要时显式 request `toolbaker`。
+- **Self-shaping toolkit，opt-in。** Adaptive bake 默认关闭。开启后，重复的本地 usage 可以变成 suggestion，由你接受成自己的 baked tool。Accepted tools 可以从 Revit ribbon 和 `list_baked_tools` / `run_baked_tool` 使用，并按 Revit 版本记录 compatibility。
 
 ---
 
@@ -251,21 +251,21 @@ pwsh .\uninstall-all.ps1 -KeepLogs  # 保留 *.log 和 *.jsonl
 
 ## Toolsets
 
-**32 个 tool 分成 11 个 toolset。** 5 个 toolset 默认开（`query`、`create`、`view`、`meta`、`lint`），其他通过 `--toolsets` 或 config opt-in。
+**32 个 tool 分成 11 个 toolset。** 5 个 toolset 默认开（`query`、`create`、`view`、`meta`、`lint`），其他通过 `--toolsets` 或 config opt-in。Adaptive bake 开启时，`toolbaker` surface 会多 3 个 suggestion lifecycle tool，完整 adaptive surface 是 35 个 tool。
 
 | Toolset | Tools | 默认 |
 |---------|-------|------|
 | `query` | get current view, selected elements, available family types, material quantities, model stats, AI element filter | **on** |
 | `create` | grid, level, room, line-based, point-based, surface-based element | **on** |
-| `view` | create view, get current view info, place view on sheet | **on** |
-| `meta` | `show_message`, `batch_execute` | **on** |
+| `view` | create view, sheet layout, place view on sheet | **on** |
+| `meta` | `show_message`, `switch_target`, `batch_execute`, usage stats | **on** |
 | `lint` | 视图命名模式分析、修正建议、firm-profile 检测 | **开启** |
 | `modify` | `operate_element`, `color_elements` | off |
 | `delete` | `delete_element` | off |
 | `annotation` | `tag_all_rooms`, `tag_all_walls` | off |
 | `export` | `export_room_data` | off |
 | `mep` | `detect_system_elements` | off |
-| `toolbaker` | `list_baked_tools`, `run_baked_tool`, `send_code_to_revit` *(需要 plugin env/config opt-in)* | off |
+| `toolbaker` | accepted-tool list/run、send-code 和 adaptive suggestion lifecycle tools *(env/config opt-in)* | off |
 
 用 `--toolsets query,create,modify,meta` 或 `--toolsets all` 打开。加 `--read-only` 会不管你 request 了什么都把 `create`/`modify`/`delete` 剥掉。
 
@@ -298,7 +298,11 @@ pwsh .\uninstall-all.ps1 -KeepLogs  # 保留 *.log 和 *.jsonl
 | `toolbaker` | `send_code_to_revit` | plugin 可见的 adaptive bake opt-in 打开后，在 Revit 里跑临时 C# 代码。 |
 | `toolbaker` | `list_baked_tools` | 列出已注册的 baked tool。 |
 | `toolbaker` | `run_baked_tool` | 按名字调用 baked tool。 |
+| `toolbaker` | `list_bake_suggestions` | Adaptive-bake only：列出本地 suggestions。 |
+| `toolbaker` | `accept_bake_suggestion` | Adaptive-bake only：接受并应用本地 suggestion。 |
+| `toolbaker` | `dismiss_bake_suggestion` | Adaptive-bake only：snooze 或 dismiss 本地 suggestion。 |
 | `meta` | `show_message` | 在 Revit 里弹 TaskDialog — 测连接、通知用户。 |
+| `meta` | `switch_target` | 多个 Revit 版本同时运行时切换 active connection。 |
 | `meta` | `batch_execute` | 在一个 TransactionGroup 里原子执行 N 个命令（一次 undo）。 |
 | `meta` | `analyze_usage_patterns` | Usage stats：tool 调用次数、session、error（最近 N 天）。 |
 | `lint` | `analyze_view_naming_patterns` | 推断视图命名主导模式 + 覆盖率 + 偏离项。 |
@@ -311,14 +315,14 @@ pwsh .\uninstall-all.ps1 -KeepLogs  # 保留 *.log 和 *.jsonl
 
 | Revit | Target Framework | Transport | 备注 |
 |-------|------------------|-----------|------|
-| 2022  | .NET 4.8 | TCP | |
-| 2023  | .NET 4.8 | TCP | |
-| 2024  | .NET 4.8 | TCP | |
-| 2025  | .NET 8 (`net8.0-windows7.0`) | Named Pipe | 第一个 .NET 8 shell |
-| 2026  | .NET 8 (`net8.0-windows7.0`) | Named Pipe | `ElementId.IntegerValue` 被移除 — 用 `RevitCompat.GetId()` |
-| 2027  | .NET 10 (`net10.0-windows7.0`) | Named Pipe | Experimental — .NET 10 还在 preview |
+| 2022  | .NET 4.8 | TCP | Accepted ToolBaker path smoke-tested |
+| 2023  | .NET 4.8 | TCP | Core runtime coverage |
+| 2024  | .NET 4.8 | TCP | Core runtime coverage |
+| 2025  | .NET 8 (`net8.0-windows7.0`) | Named Pipe | 第一个 .NET 8 shell；core runtime coverage |
+| 2026  | .NET 8 (`net8.0-windows7.0`) | Named Pipe | Core runtime coverage；accepted ToolBaker path smoke-tested |
+| 2027  | .NET 10 (`net10.0-windows7.0`) | Named Pipe | Accepted ToolBaker path smoke-tested |
 
-Compile gate 6/6；R23–R26 上 runtime verified 4/4（看 commit 历史里的 `A1`）。R22 和 R27 是 compile-evidence ship — stack 和 R23、R26 一样，但我自己没跑过，所以不叫它 verified。
+Compile gate 6/6。Core runtime coverage 已经在 R23–R26 通过，accepted ToolBaker list/run/ribbon path 也已经在 R22、R26、R27 做过 manual smoke test。这是实际 runtime evidence，但不是承诺每个 baked tool 都能跨所有 Revit 年份 portable；Revit API drift 仍然可能影响 custom C# body。
 
 ---
 
@@ -348,26 +352,24 @@ Compile gate 6/6；R23–R26 上 runtime verified 4/4（看 commit 历史里的 
 | Read-only | `--read-only` | `BIMWRIGHT_READ_ONLY=1` | `readOnly` |
 | 允许 LAN bind | — | `BIMWRIGHT_ALLOW_LAN_BIND=1` | `allowLanBind` |
 | 启用 ToolBaker | `--enable-toolbaker` / `--disable-toolbaker` | `BIMWRIGHT_ENABLE_TOOLBAKER` | `enableToolbaker` |
+| 启用 adaptive bake suggestions | — | `BIMWRIGHT_ENABLE_ADAPTIVE_BAKE=1` | `enableAdaptiveBake` |
+| Cache send-code bodies 供 clustering | — | `BIMWRIGHT_CACHE_SEND_CODE_BODIES=1` | `cacheSendCodeBodies` |
 
 JSON 文件路径：`%LOCALAPPDATA%\Bimwright\bimwright.config.json`。
 
 ---
 
-## ToolBaker — 内置 tool 不够用的时候，自己烤一个
+## Self-shaping toolkit
 
-通用 tool 就是通用。你的真实 BIM 工作不是 — 你有自己的命名规则，自己的 QA 步骤，自己的 export pipeline。每个 session，agent 要 stitch 8–10 个 primitive call 来做同一件事，每次都要烧 token。这事烦得够我做一条出路。
+Adaptive bake 是把重复的本地 Revit workflow 变成个人 tool 的 opt-in 路径。默认 OFF。只有当你希望 Bimwright 记录本地 usage pattern 并提出 bake suggestion 时才打开。
 
-你用一句人话描述 workflow。经过 review 的 C# handler 可以持久化到本地 baked-tool registry，并由 baked-tool runtime 加载。下个 session — 这个 workflow 就是一个 call。
+Usage data 留在本机 `%LOCALAPPDATA%\Bimwright\`。Server 是唯一的 SQLite writer；Revit plugin 只读取 `bake.db`，并负责 runtime command cache 和 ribbon buttons。没有 usage collection endpoint。
 
-流程：
+Accepted baked tools 可以从 Revit ribbon 和 `toolbaker` indirection tools 使用：先调用 `list_baked_tools` 查看 accepted tools，再用 `run_baked_tool` + `name=<tool_name>` 执行。在 v0.3.x，baked tools 不会作为独立 native MCP tools 出现在列表里。Accepted-tool path 已经在 R22、R26、R27 smoke-tested，包括 cross-version compatibility metadata 更新。
 
-1. 描述真实的 dataflow，比如 *"按 fire rating schedule 所有门，标出 fail 的，导出 CSV"*。
-2. Model 按 `IRevitCommand` contract 写 handler，供你 review。
-3. 已接受的 handler source 通过 Roslyn 编译，link 到 live Revit API，然后 load 到 baked-command runtime。
-4. 本地 registry 持久化已接受的 handler。之后的 session 会重新加载。
-5. 通过 `run_baked_tool` 调用 — 同样的 schema validation，同样的 transaction safety。
+`bake_tool` 在 v0.3.0 中已经移除。新的 bake 来自 measured suggestions，并通过 `accept_bake_suggestion` 明确由用户接受；legacy accepted tools 仍然可以通过 `list_baked_tools` / `run_baked_tool` 调用。
 
-用 `--toolsets toolbaker` 或 `--toolsets all` 暴露 `run_baked_tool`。`send_code_to_revit` — 不 sandbox 的 escape hatch — 需要在 plugin 侧 opt in：Revit 进程环境里设置 `BIMWRIGHT_ENABLE_ADAPTIVE_BAKE=1`，或在 `%LOCALAPPDATA%\Bimwright\bimwright.config.json` 里设置 `"enableAdaptiveBake": true`。
+见 [docs/bake.md](docs/bake.md)：如何开启、privacy、suggestion handling、archive behavior 和 cross-Revit compatibility notes。
 
 ---
 
@@ -375,6 +377,7 @@ JSON 文件路径：`%LOCALAPPDATA%\Bimwright\bimwright.config.json`。
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) — 进程模型、transport、多版本策略、ToolBaker pipeline。
 - [CONTRIBUTING.md](CONTRIBUTING.md) — 开发环境、build matrix、代码风格。
+- [docs/bake.md](docs/bake.md) — adaptive bake opt-in、privacy、suggestions、accepted tools、compat behavior。
 - [docs/roadmap.md](docs/roadmap.md) — v0.2（MCP Resources、ToolBaker 加固）、v0.3（async job polling、aggregator listings）、v1.0（治理）。
 
 ---

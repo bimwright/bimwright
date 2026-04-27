@@ -24,7 +24,7 @@ Mình làm cái này vì mình chán click rồi.
 
 Chắc anh/chị cũng dính cảnh này: 5 giờ chiều, BIM Manager ping *"đổi tên tất cả theo chuẩn mới"* — L01 - Hầm, L02 - Thương mại, cứ thế đến hết. Model có mấy ngàn element. Click tay thì xác định. Viết Dynamo script thì nửa ngày. Đúng chỗ ngứa.
 
-**rvt-mcp** là một add-in chạy song song với Revit 2022–2027. Anh/chị nói với Claude (hoặc Cursor, Codex, OpenCode — agent nào cũng được) muốn làm gì, nó gọi 1 trong 29 tool, Revit chạy trong 1 transaction duy nhất. Không ưng? **Ctrl+Z** — 1 bước, rollback sạch.
+**rvt-mcp** là một add-in chạy song song với Revit 2022–2027. Anh/chị nói với Claude (hoặc Cursor, Codex, OpenCode — agent nào cũng được) muốn làm gì, nó gọi 1 trong 32 tool local, Revit chạy trong 1 transaction duy nhất. Không ưng? **Ctrl+Z** — 1 bước, rollback sạch.
 
 Không cloud. Không có gì rời khỏi máy của anh/chị. Apache-2.0, pure C#.
 
@@ -32,11 +32,11 @@ Không cloud. Không có gì rời khỏi máy của anh/chị. Apache-2.0, pure
 
 Vài thứ mình care:
 
-- **Đủ Revit 2022 đến 2027.** 1 codebase, 6 plugin shell (.NET 4.8 → .NET 10). R22 với R27 ship dựa trên compile-evidence — chỉ runtime-verified 4/4 trên R23–R26 thôi. Stack giống hệt R23 và R26 nên thành thật mà nói mình khá chắc nó chạy, nhưng mình không nói verified cái mình chưa chạy được.
+- **Đủ Revit 2022 đến 2027.** 1 codebase, 6 plugin shell (.NET 4.8 → .NET 10). Compile gate 6/6, core runtime coverage có trên R23–R26, và accepted ToolBaker path đã smoke-test trên R22, R26, R27.
 - **Pure C#, Apache-2.0.** Không cần Node.js trên máy chạy Revit. License enterprise-safe, dependency graph audit được.
 - **Batch atomic.** `batch_execute` gói cả list command trong 1 `TransactionGroup`. 1 undo step. Nếu 1 command trong batch fail thì cả batch rollback — không có chuyện stuck ở trạng thái nửa chừng.
 - **Model yếu không bị loãng.** `--toolsets` + `--read-only` kiểm soát cái model được thấy. Haiku-size không cần biết tới `delete_element` khi anh/chị chỉ hỏi quantity.
-- **ToolBaker, opt-in.** Khi built-in không đủ, model tự viết tool mới bằng C#, compile qua Roslyn, rồi load qua baked-tool runtime. Public toolset không nằm trong surface mặc định; request `toolbaker` rõ ràng khi cần.
+- **Self-shaping toolkit, opt-in.** Adaptive bake mặc định tắt. Khi bật, usage local lặp lại có thể thành suggestion để anh/chị accept thành baked tool riêng. Accepted tools chạy được từ ribbon Revit và qua `list_baked_tools` / `run_baked_tool`, kèm compatibility theo từng Revit version.
 
 ---
 
@@ -251,21 +251,21 @@ Xem [AGENTS.md](AGENTS.md) để biết đường dẫn config, schema, dry-run 
 
 ## Toolsets
 
-**32 tool chia thành 11 toolset.** 5 toolset bật mặc định (`query`, `create`, `view`, `meta`, `lint`); còn lại opt-in qua `--toolsets` hoặc config.
+**32 tool chia thành 11 toolset.** 5 toolset bật mặc định (`query`, `create`, `view`, `meta`, `lint`); còn lại opt-in qua `--toolsets` hoặc config. Khi adaptive bake bật, 3 tool lifecycle suggestion được thêm vào surface `toolbaker`, tổng surface adaptive là 35 tool.
 
 | Toolset | Tools | Mặc định |
 |---------|-------|----------|
 | `query` | get current view, selected elements, available family types, material quantities, model stats, AI element filter | **on** |
 | `create` | grid, level, room, line-based, point-based, surface-based element | **on** |
-| `view` | create view, get current view info, place view on sheet | **on** |
-| `meta` | `show_message`, `batch_execute` | **on** |
+| `view` | create view, sheet layout, place view on sheet | **on** |
+| `meta` | `show_message`, `switch_target`, `batch_execute`, usage stats | **on** |
 | `lint` | phân tích mẫu đặt tên view, gợi ý sửa, phát hiện firm-profile | **bật** |
 | `modify` | `operate_element`, `color_elements` | off |
 | `delete` | `delete_element` | off |
 | `annotation` | `tag_all_rooms`, `tag_all_walls` | off |
 | `export` | `export_room_data` | off |
 | `mep` | `detect_system_elements` | off |
-| `toolbaker` | `list_baked_tools`, `run_baked_tool`, `send_code_to_revit` *(cần opt-in qua env/config của plugin)* | off |
+| `toolbaker` | accepted-tool list/run, send-code, và adaptive suggestion lifecycle tools *(opt-in qua env/config)* | off |
 
 Bật bằng `--toolsets query,create,modify,meta` hoặc `--toolsets all`. Thêm `--read-only` để strip `create`/`modify`/`delete` bất kể request gì.
 
@@ -298,7 +298,11 @@ Bật bằng `--toolsets query,create,modify,meta` hoặc `--toolsets all`. Thê
 | `toolbaker` | `send_code_to_revit` | Chạy C# body ad-hoc trong Revit sau khi plugin thấy opt-in adaptive bake. |
 | `toolbaker` | `list_baked_tools` | List tool đã bake. |
 | `toolbaker` | `run_baked_tool` | Gọi tool đã bake theo tên. |
+| `toolbaker` | `list_bake_suggestions` | Chỉ adaptive-bake: list suggestion local. |
+| `toolbaker` | `accept_bake_suggestion` | Chỉ adaptive-bake: accept và apply suggestion local. |
+| `toolbaker` | `dismiss_bake_suggestion` | Chỉ adaptive-bake: snooze hoặc dismiss suggestion local. |
 | `meta` | `show_message` | TaskDialog trong Revit — test connection, notify user. |
+| `meta` | `switch_target` | Đổi Revit connection active khi nhiều version đang chạy. |
 | `meta` | `batch_execute` | Chạy N command atomic trong 1 TransactionGroup (1 undo). |
 | `meta` | `analyze_usage_patterns` | Stats usage: tool calls, session, error (N ngày gần nhất). |
 | `lint` | `analyze_view_naming_patterns` | Suy ra mẫu đặt tên view chủ đạo + độ phủ + outliers. |
@@ -311,14 +315,14 @@ Bật bằng `--toolsets query,create,modify,meta` hoặc `--toolsets all`. Thê
 
 | Revit | Target Framework | Transport | Ghi chú |
 |-------|------------------|-----------|---------|
-| 2022  | .NET 4.8 | TCP | |
-| 2023  | .NET 4.8 | TCP | |
-| 2024  | .NET 4.8 | TCP | |
-| 2025  | .NET 8 (`net8.0-windows7.0`) | Named Pipe | Shell .NET 8 đầu tiên |
-| 2026  | .NET 8 (`net8.0-windows7.0`) | Named Pipe | `ElementId.IntegerValue` bị remove — dùng `RevitCompat.GetId()` |
-| 2027  | .NET 10 (`net10.0-windows7.0`) | Named Pipe | Experimental — .NET 10 vẫn preview |
+| 2022  | .NET 4.8 | TCP | Accepted ToolBaker path smoke-tested |
+| 2023  | .NET 4.8 | TCP | Core runtime coverage |
+| 2024  | .NET 4.8 | TCP | Core runtime coverage |
+| 2025  | .NET 8 (`net8.0-windows7.0`) | Named Pipe | Shell .NET 8 đầu tiên; core runtime coverage |
+| 2026  | .NET 8 (`net8.0-windows7.0`) | Named Pipe | Core runtime coverage; accepted ToolBaker path smoke-tested |
+| 2027  | .NET 10 (`net10.0-windows7.0`) | Named Pipe | Accepted ToolBaker path smoke-tested |
 
-Compile gate 6/6; runtime verified 4/4 trên R23–R26 (xem `A1` trong commit history). R22 và R27 ship trên compile-evidence — stack giống hệt R23 và R26, nhưng mình chưa tự chạy được nên không gọi là verified.
+Compile gate 6/6. Core runtime coverage đã pass trên R23–R26, và manual smoke test đã cover accepted ToolBaker list/run/ribbon path trên R22, R26, R27. Đây là bằng chứng runtime thực tế, không phải cam kết mọi baked tool portable qua mọi năm Revit; Revit API drift vẫn có thể ảnh hưởng custom C# body.
 
 ---
 
@@ -348,26 +352,24 @@ Full threat model trong [security appendix](docs/roadmap.md#security).
 | Read-only | `--read-only` | `BIMWRIGHT_READ_ONLY=1` | `readOnly` |
 | Cho phép LAN bind | — | `BIMWRIGHT_ALLOW_LAN_BIND=1` | `allowLanBind` |
 | Bật ToolBaker | `--enable-toolbaker` / `--disable-toolbaker` | `BIMWRIGHT_ENABLE_TOOLBAKER` | `enableToolbaker` |
+| Bật adaptive bake suggestions | — | `BIMWRIGHT_ENABLE_ADAPTIVE_BAKE=1` | `enableAdaptiveBake` |
+| Cache send-code bodies để cluster | — | `BIMWRIGHT_CACHE_SEND_CODE_BODIES=1` | `cacheSendCodeBodies` |
 
 JSON file: `%LOCALAPPDATA%\Bimwright\bimwright.config.json`.
 
 ---
 
-## ToolBaker — nướng tool riêng khi built-in không đủ
+## Self-shaping toolkit
 
-Tool generic thì generic. Task BIM thực của anh/chị không như vậy — có quy ước đặt tên riêng, có bước QA riêng, có pipeline export riêng. Mỗi session, agent phải stitch 8–10 primitive call để làm đúng cái workflow đó, và anh/chị đốt token mỗi lần. Mình bực đủ để xây đường thoát.
+Adaptive bake là đường opt-in để biến workflow Revit local lặp lại thành tool cá nhân. Mặc định OFF. Chỉ bật khi anh/chị muốn Bimwright ghi pattern usage local và đề xuất bake suggestion.
 
-Anh/chị mô tả workflow 1 lần bằng tiếng người. Một handler C# đã review có thể được persist trong local baked-tool registry và load qua baked-tool runtime. Session sau — workflow đó chỉ còn 1 call.
+Usage data ở lại trên máy trong `%LOCALAPPDATA%\Bimwright\`. Server là SQLite writer duy nhất; plugin Revit chỉ đọc `bake.db` và quản lý runtime command cache/ribbon buttons. Không có usage collection endpoint.
 
-Walkthrough:
+Accepted baked tools chạy được từ ribbon Revit và qua tool indirection của `toolbaker`: gọi `list_baked_tools` để xem accepted tools, rồi `run_baked_tool` với `name=<tool_name>` để chạy. Trong v0.3.x, baked tools không xuất hiện thành native MCP tools riêng. Accepted-tool path đã smoke-test trên R22, R26, R27, gồm cả cross-version compatibility metadata.
 
-1. Mô tả dataflow thực, ví dụ *"schedule tất cả cửa theo fire rating, tag cái fail, export ra CSV"*.
-2. Model generate handler theo contract `IRevitCommand` để review.
-3. Handler source đã accept được compile qua Roslyn, link với Revit API live, rồi load vào baked-command runtime.
-4. Local registry persist handler đã accept. Các handler này được reload ở session sau.
-5. Call qua `run_baked_tool` — cùng schema validation, cùng transaction safety.
+`bake_tool` đã bị remove trong v0.3.0. Bake mới đi qua measured suggestions và user acceptance rõ ràng bằng `accept_bake_suggestion`; legacy accepted tools vẫn callable qua `list_baked_tools` / `run_baked_tool`.
 
-Expose `run_baked_tool` bằng `--toolsets toolbaker` hoặc `--toolsets all`. `send_code_to_revit` — escape hatch không sandbox — cần opt-in ở phía plugin bằng `BIMWRIGHT_ENABLE_ADAPTIVE_BAKE=1` trong environment của process Revit hoặc `"enableAdaptiveBake": true` trong `%LOCALAPPDATA%\Bimwright\bimwright.config.json`.
+Xem [docs/bake.md](docs/bake.md) để biết cách bật, privacy, suggestion handling, archive behavior và cross-Revit compatibility notes.
 
 ---
 
@@ -375,6 +377,7 @@ Expose `run_baked_tool` bằng `--toolsets toolbaker` hoặc `--toolsets all`. `
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) — process model, transport, chiến lược multi-version, pipeline ToolBaker.
 - [CONTRIBUTING.md](CONTRIBUTING.md) — setup dev, build matrix, coding style.
+- [docs/bake.md](docs/bake.md) — adaptive bake opt-in, privacy, suggestions, accepted tools, compat behavior.
 - [docs/roadmap.md](docs/roadmap.md) — v0.2 (MCP Resources, hardening ToolBaker), v0.3 (async job polling, aggregator listings), v1.0 (governance).
 
 ---
