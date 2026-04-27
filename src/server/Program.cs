@@ -9,9 +9,12 @@ using System.IO.Pipes;
 using System.Linq;
 using System.Net.Sockets;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Bimwright.Rvt.Plugin; // BimwrightConfig
+using Bimwright.Rvt.Server.Bake;
+using Bimwright.Rvt.Server.Handlers;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -49,9 +52,13 @@ namespace Bimwright.Rvt.Server
                 AuthToken.Target = target;
             }
 
+            var bakePaths = new BakePaths();
+            TryInitializeBakeStorage(bakePaths, out _);
+
             // Initialize memory system (shared across tool classes + resources)
             var session = new Memory.SessionContext();
             ToolGateway.Session = session;
+            ToolGateway.UsageLogger = new UsageEventLogger(bakePaths, config);
             RevitResources.Session = session;
 
             int httpIndex = Array.IndexOf(args, "--http");
@@ -72,6 +79,36 @@ namespace Bimwright.Rvt.Server
             }
         }
 
+        internal static LegacyBakedToolImportResult InitializeBakeStorage(BakePaths paths)
+        {
+            if (paths == null)
+                throw new ArgumentNullException(nameof(paths));
+
+            using var db = new BakeDb(paths);
+            db.Migrate();
+            var importer = new LegacyBakedToolImporter(paths, db, new ToolBakerAuditLog(paths.AuditJsonl));
+            return importer.ImportIfNeeded();
+        }
+
+        internal static bool TryInitializeBakeStorage(BakePaths paths, out LegacyBakedToolImportResult result)
+        {
+            try
+            {
+                result = InitializeBakeStorage(paths);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                result = null;
+                var pathHint = paths?.Root ?? "(unknown path)";
+                Console.Error.WriteLine(
+                    $"[Bimwright] Warning: ToolBaker bake storage initialization failed for {pathHint}. " +
+                    "The MCP server will continue; baked-tool migration/import can be retried on next startup. " +
+                    $"{ex.GetType().Name}: {ex.Message}");
+                return false;
+            }
+        }
+
         private static async Task RunStdio(BimwrightConfig config)
         {
             var enabled = ToolsetFilter.Resolve(config);
@@ -79,7 +116,7 @@ namespace Bimwright.Rvt.Server
             var mcp = builder.Services
                 .AddMcpServer()
                 .WithStdioServerTransport();
-            mcp = RegisterToolsets(mcp, enabled);
+            mcp = RegisterToolsets(mcp, enabled, config);
             mcp.WithResources<RevitResources>();
             var app = builder.Build();
             await app.RunAsync();
@@ -92,7 +129,7 @@ namespace Bimwright.Rvt.Server
             var mcp = builder.Services
                 .AddMcpServer()
                 .WithHttpTransport();
-            mcp = RegisterToolsets(mcp, enabled);
+            mcp = RegisterToolsets(mcp, enabled, config);
             mcp.WithResources<RevitResources>();
 
             builder.WebHost.UseUrls($"http://127.0.0.1:{port}");
@@ -142,8 +179,14 @@ namespace Bimwright.Rvt.Server
                 "  --read-only             Shortcut that excludes create, modify, and delete toolsets.",
                 "",
                 "ToolBaker:",
-                "  --enable-toolbaker      Enable ToolBaker toolset (default ON).",
-                "  --disable-toolbaker     Disable ToolBaker toolset.",
+                "  --enable-toolbaker      Allow ToolBaker when selected via --toolsets (default ON).",
+                "  --disable-toolbaker     Disable ToolBaker even if selected via --toolsets.",
+                "  --enable-adaptive-bake  Enable adaptive ToolBaker suggestions (default OFF).",
+                "  --disable-adaptive-bake Disable adaptive ToolBaker suggestions.",
+                "  --cache-send-code-bodies",
+                "                          Cache send_code_to_revit code bodies locally (default OFF).",
+                "  --no-cache-send-code-bodies",
+                "                          Disable local send_code_to_revit code body caching.",
                 "",
                 "Transport security (S7):",
                 "  --allow-lan-bind        (plugin-side only — set BIMWRIGHT_ALLOW_LAN_BIND env var in",
@@ -152,7 +195,8 @@ namespace Bimwright.Rvt.Server
                 "",
                 "Env vars (override JSON, overridden by CLI):",
                 "  BIMWRIGHT_TARGET, BIMWRIGHT_TOOLSETS, BIMWRIGHT_READ_ONLY,",
-                "  BIMWRIGHT_ALLOW_LAN_BIND, BIMWRIGHT_ENABLE_TOOLBAKER",
+                "  BIMWRIGHT_ALLOW_LAN_BIND, BIMWRIGHT_ENABLE_TOOLBAKER,",
+                "  BIMWRIGHT_ENABLE_ADAPTIVE_BAKE, BIMWRIGHT_CACHE_SEND_CODE_BODIES",
                 "",
                 "Config file (lowest precedence):",
                 "  %LOCALAPPDATA%\\Bimwright\\bimwright.config.json",
@@ -163,7 +207,7 @@ namespace Bimwright.Rvt.Server
             Console.WriteLine(usage);
         }
 
-        private static IMcpServerBuilder RegisterToolsets(IMcpServerBuilder mcp, HashSet<string> enabled)
+        private static IMcpServerBuilder RegisterToolsets(IMcpServerBuilder mcp, HashSet<string> enabled, BimwrightConfig config)
         {
             if (enabled.Contains("query"))      mcp = mcp.WithTools<QueryTools>();
             if (enabled.Contains("create"))     mcp = mcp.WithTools<CreateTools>();
@@ -174,9 +218,30 @@ namespace Bimwright.Rvt.Server
             if (enabled.Contains("annotation")) mcp = mcp.WithTools<AnnotationTools>();
             if (enabled.Contains("mep"))        mcp = mcp.WithTools<MepTools>();
             if (enabled.Contains("toolbaker"))  mcp = mcp.WithTools<ToolbakerTools>();
+            if (enabled.Contains("toolbaker") && config?.EnableAdaptiveBakeOrDefault == true)
+                mcp = mcp.WithTools<AdaptiveBakeTools>();
             if (enabled.Contains("meta"))       mcp = mcp.WithTools<MetaTools>();
             if (enabled.Contains("lint"))       mcp = mcp.WithTools<LintTools>();
             return mcp;
+        }
+
+        private static Type[] ResolveRegisteredToolTypes(HashSet<string> enabled, BimwrightConfig config)
+        {
+            var types = new List<Type>();
+            if (enabled.Contains("query"))      types.Add(typeof(QueryTools));
+            if (enabled.Contains("create"))     types.Add(typeof(CreateTools));
+            if (enabled.Contains("modify"))     types.Add(typeof(ModifyTools));
+            if (enabled.Contains("delete"))     types.Add(typeof(DeleteTools));
+            if (enabled.Contains("view"))       types.Add(typeof(ViewTools));
+            if (enabled.Contains("export"))     types.Add(typeof(ExportTools));
+            if (enabled.Contains("annotation")) types.Add(typeof(AnnotationTools));
+            if (enabled.Contains("mep"))        types.Add(typeof(MepTools));
+            if (enabled.Contains("toolbaker"))  types.Add(typeof(ToolbakerTools));
+            if (enabled.Contains("toolbaker") && config?.EnableAdaptiveBakeOrDefault == true)
+                types.Add(typeof(AdaptiveBakeTools));
+            if (enabled.Contains("meta"))       types.Add(typeof(MetaTools));
+            if (enabled.Contains("lint"))       types.Add(typeof(LintTools));
+            return types.ToArray();
         }
     }
 
@@ -188,6 +253,8 @@ namespace Bimwright.Rvt.Server
     internal static class ToolGateway
     {
         public static Memory.SessionContext Session { get; set; }
+        public static UsageEventLogger UsageLogger { get; set; }
+        public static string CurrentRevitVersion { get; private set; }
 
         private static TcpClient _client;
         private static NamedPipeClientStream _pipeStream;
@@ -230,6 +297,7 @@ namespace Bimwright.Rvt.Server
                             PipeOptions.Asynchronous);
                         pipe.Connect(5000);
                         _token = pipeToken;
+                        CurrentRevitVersion = pipeVer;
                         _pipeStream = pipe;
                         stream = pipe;
                         Console.Error.WriteLine($"[Bimwright] Connected to Revit {pipeVer} via Named Pipe: {pipeName}");
@@ -246,6 +314,7 @@ namespace Bimwright.Rvt.Server
                 if (stream == null && AuthToken.TryReadTcp(out var port, out var tcpToken, out var tcpVer))
                 {
                     _token = tcpToken;
+                    CurrentRevitVersion = tcpVer;
                     _client = new TcpClient();
                     _client.Connect("127.0.0.1", port);
                     stream = _client.GetStream();
@@ -315,6 +384,7 @@ namespace Bimwright.Rvt.Server
                 _reader = null;
                 _writer = null;
                 _token = null;
+                CurrentRevitVersion = null;
                 foreach (var kv in _pending)
                 {
                     kv.Value.TrySetException(new OperationCanceledException(
@@ -347,6 +417,7 @@ namespace Bimwright.Rvt.Server
                 sw.Stop();
                 var paramsStr = parameters != null ? JsonConvert.SerializeObject(parameters) : null;
                 Session?.RecordCall(command, paramsStr, false, sw.ElapsedMilliseconds, "Timeout (60s)");
+                UsageLogger?.RecordToolCall(command, paramsStr, false);
                 throw new TimeoutException("Request timed out (60s). Revit may be in a modal dialog.");
             }
 
@@ -360,12 +431,14 @@ namespace Bimwright.Rvt.Server
                 var data = response["data"] as JObject ?? new JObject();
                 Session?.RecordCall(command, paramsJson, true, sw.ElapsedMilliseconds,
                     resultJson: data.ToString(Formatting.None));
+                UsageLogger?.RecordToolCall(command, paramsJson, true);
                 return data;
             }
             else
             {
                 var error = response.Value<string>("error") ?? "Unknown error from Revit";
                 Session?.RecordCall(command, paramsJson, false, sw.ElapsedMilliseconds, error);
+                UsageLogger?.RecordToolCall(command, paramsJson, false);
                 throw new InvalidOperationException(error);
             }
         }
@@ -669,21 +742,6 @@ namespace Bimwright.Rvt.Server
             catch (Exception ex) { return $"Error: {ex.Message}"; }
         }
 
-        [McpServerTool(Name = "bake_tool", Destructive = false), System.ComponentModel.Description(
-            "Bake a permanent MCP tool from C# code. Variables: app (UIApplication), doc (Document), " +
-            "uidoc (UIDocument), request (JObject from paramsJson). Code must return CommandResult.Ok(data) or CommandResult.Fail(error). " +
-            "Params: name (alphanumeric+underscore), description, code (C# method body), " +
-            "parametersSchema (JSON schema, optional). Debug builds only.")]
-        public static async Task<string> BakeTool(string name, string description, string code, string parametersSchema = "{}")
-        {
-            try
-            {
-                var result = await ToolGateway.SendToRevit("bake_tool", new { name, description, code, parametersSchema });
-                return JsonConvert.SerializeObject(result, Formatting.Indented);
-            }
-            catch (Exception ex) { return $"Error: {ex.Message}"; }
-        }
-
         [McpServerTool(Name = "list_baked_tools", ReadOnly = true, Idempotent = true), System.ComponentModel.Description(
             "List all baked tools with name, description, usage count, creation date. " +
             "Call before run_baked_tool to discover available tools.")]
@@ -700,12 +758,132 @@ namespace Bimwright.Rvt.Server
         [McpServerTool(Name = "run_baked_tool"), System.ComponentModel.Description(
             "Run a baked tool by name. Call list_baked_tools first to discover. " +
             "Params: name (baked tool name), params (object, tool-specific).")]
-        public static async Task<string> RunBakedTool(string name, string @params = "{}")
+        public static async Task<string> RunBakedTool(string name, object @params = null)
+        {
+            var revitVersionBeforeConnect = ToolGateway.CurrentRevitVersion ?? AuthToken.Target ?? "unknown";
+            try
+            {
+                var normalizedParams = NormalizeRunBakedToolParams(@params);
+                var result = await ToolGateway.SendToRevit("run_baked_tool", new { name, @params = normalizedParams });
+                var revitVersion = ToolGateway.CurrentRevitVersion ?? revitVersionBeforeConnect;
+                RecordBakedToolRun(name, revitVersion, success: true, error: null);
+                return JsonConvert.SerializeObject(result, Formatting.Indented);
+            }
+            catch (Exception ex)
+            {
+                var revitVersion = ToolGateway.CurrentRevitVersion ?? revitVersionBeforeConnect;
+                RecordBakedToolRun(name, revitVersion, success: false, error: ex.Message);
+                return $"Error: {ex.Message}";
+            }
+        }
+
+        public static JObject NormalizeRunBakedToolParams(object @params)
+        {
+            if (@params == null)
+                return new JObject();
+
+            if (@params is JObject obj)
+                return obj;
+
+            if (@params is JToken token)
+            {
+                if (token is JObject tokenObj)
+                    return tokenObj;
+                throw new ArgumentException("params must be a JSON object.");
+            }
+
+            if (!(@params is JsonElement element))
+            {
+                var converted = JToken.FromObject(@params);
+                if (converted is JObject convertedObj)
+                    return convertedObj;
+                throw new ArgumentException("params must be a JSON object.");
+            }
+
+            switch (element.ValueKind)
+            {
+                case JsonValueKind.Undefined:
+                case JsonValueKind.Null:
+                    return new JObject();
+                case JsonValueKind.Object:
+                    return JObject.Parse(element.GetRawText());
+                default:
+                    throw new ArgumentException("params must be a JSON object.");
+            }
+        }
+
+        private static void RecordBakedToolRun(string name, string revitVersion, bool success, string error)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                return;
+
+            try
+            {
+                using var db = new BakeDb(new BakePaths());
+                db.Migrate();
+                db.TryRecordRegistryRun(name, revitVersion, success, error, DateTimeOffset.UtcNow);
+            }
+            catch
+            {
+                // Server owns durable bake.db writes, but run_baked_tool should not fail
+                // just because lifecycle stats could not be updated.
+            }
+        }
+    }
+
+    [McpServerToolType, Toolset("toolbaker")]
+    public class AdaptiveBakeTools
+    {
+        [McpServerTool(Name = "list_bake_suggestions", ReadOnly = true, Idempotent = true), System.ComponentModel.Description(
+            "List adaptive ToolBaker suggestions. Returns suggestions with id, title, source, score, state, output choices, and creation time.")]
+        public static string ListBakeSuggestions()
         {
             try
             {
-                var result = await ToolGateway.SendToRevit("run_baked_tool", new { name, @params });
-                return JsonConvert.SerializeObject(result, Formatting.Indented);
+                var paths = new BakePaths();
+                using var db = new BakeDb(paths);
+                db.Migrate();
+                return ListBakeSuggestionsHandler.Handle(db, ToolGateway.UsageLogger);
+            }
+            catch (Exception ex) { return $"Error: {ex.Message}"; }
+        }
+
+        [McpServerTool(Name = "accept_bake_suggestion"), System.ComponentModel.Description(
+            "Accept an adaptive ToolBaker suggestion by id. Validates name, schema, and output choice, then prepares a bake request without native tool promotion.")]
+        public static async Task<string> AcceptBakeSuggestion(string id, string name, string output_choice = "mcp_only", string params_schema = null)
+        {
+            try
+            {
+                var paths = new BakePaths();
+                using var db = new BakeDb(paths);
+                db.Migrate();
+                return await AcceptBakeSuggestionHandler.HandleAsync(
+                    db,
+                    id,
+                    name,
+                    output_choice,
+                    params_schema,
+                    pluginApply: request => ToolGateway.SendToRevit("apply_bake", request));
+            }
+            catch (Exception ex) { return $"Error: {ex.Message}"; }
+        }
+
+        [McpServerTool(Name = "dismiss_bake_suggestion"), System.ComponentModel.Description(
+            "Dismiss an adaptive ToolBaker suggestion. action must be snooze_30d, never, or never_with_gap_signal.")]
+        public static string DismissBakeSuggestion(string id, string action)
+        {
+            try
+            {
+                var paths = new BakePaths();
+                using var db = new BakeDb(paths);
+                db.Migrate();
+                var revitVersion = ToolGateway.CurrentRevitVersion ?? AuthToken.Target ?? "unknown";
+                return DismissBakeSuggestionHandler.Handle(
+                    db,
+                    id,
+                    action,
+                    currentRevitVersion: revitVersion,
+                    auditLog: new ToolBakerAuditLog(paths.AuditJsonl));
             }
             catch (Exception ex) { return $"Error: {ex.Message}"; }
         }

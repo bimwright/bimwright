@@ -88,21 +88,20 @@ Tools are grouped into 10 toolset classes (`QueryTools`, `CreateTools`, `ViewToo
 ## ToolBaker pipeline
 
 ```
-bake_tool(name, code) ─┐
-                       ▼
-          Roslyn CSharpCompilation
-                       │  (refs: AppDomain.GetAssemblies() — avoids Assembly.Load crash in Revit)
-                       ▼
-           In-memory Assembly
-                       ▼
-     AssemblyLoadContext (isolated per tool)
-                       ▼
-          Register as IRevitCommand
-                       │
-run_baked_tool(name) ──┘
+Legacy local baked-tool registry
+             │
+             ▼
+Roslyn CSharpCompilation
+             │  (refs: AppDomain.GetAssemblies() — avoids Assembly.Load crash in Revit)
+             ▼
+In-memory Assembly
+             ▼
+Loaded baked IRevitCommand
+             │
+run_baked_tool(name)
 ```
 
-Baked tools persist across Revit restarts via SQLite. `send_code_to_revit` is the unsandboxed cousin — it executes arbitrary C# against the running Revit session. Gated behind `ALLOW_SEND_CODE` which is Debug-only.
+Baked tools persist across Revit restarts in the current local user registry and are executed only through `list_baked_tools` + `run_baked_tool`; they are not exposed as native MCP tools. SQLite-backed metadata, stronger isolation, and signed-bake verification are planned adaptive-bake hardening work. `send_code_to_revit` is the unsandboxed cousin — it executes arbitrary C# against the running Revit session and is runtime-gated by plugin-visible adaptive-bake opt-in from the Revit process environment or `%LOCALAPPDATA%\Bimwright\bimwright.config.json`.
 
 ## Config precedence (A9)
 

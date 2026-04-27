@@ -31,6 +31,9 @@ __temp_research/
 .claude/
 CLAUDE.md
 
+# Agent session notes / local changelog drafts
+.Codex/
+
 # OS
 Thumbs.db
 Desktop.ini

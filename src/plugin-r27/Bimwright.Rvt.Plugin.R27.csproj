@@ -10,11 +10,6 @@
     <DefineConstants>REVIT2027;REVIT2024_OR_GREATER;REVIT2027_OR_GREATER</DefineConstants>
   </PropertyGroup>
 
-  <!-- Gate send_code_to_revit: only available in Debug builds -->
-  <PropertyGroup Condition="$(Configuration.StartsWith('Debug'))">
-    <DefineConstants>$(DefineConstants);ALLOW_SEND_CODE</DefineConstants>
-  </PropertyGroup>
-
   <!-- Shared source (same glob as plugin-r22) -->
   <ItemGroup>
     <Compile Include="..\shared\**\*.cs" LinkBase="Shared" />
@@ -37,10 +32,13 @@
       <DeployDir>$(APPDATA)\Autodesk\Revit\Addins\2027\Bimwright\</DeployDir>
     </PropertyGroup>
     <ItemGroup>
-      <DeployFiles Include="$(OutputPath)Bimwright.*.dll;$(OutputPath)Newtonsoft.Json.dll;$(OutputPath)Microsoft.CodeAnalysis*.dll" />
+      <DeployFiles Include="$(OutputPath)Bimwright.*.dll;$(OutputPath)Newtonsoft.Json.dll;$(OutputPath)Microsoft.Data.Sqlite.dll;$(OutputPath)SQLitePCLRaw*.dll;$(OutputPath)Microsoft.CodeAnalysis*.dll" />
+      <DeployNativeSqlite Include="$(OutputPath)runtimes\win-x64\native\e_sqlite3.dll" Condition="Exists('$(OutputPath)runtimes\win-x64\native\e_sqlite3.dll')" />
     </ItemGroup>
     <MakeDir Directories="$(DeployDir)" />
     <Copy SourceFiles="@(DeployFiles)" DestinationFolder="$(DeployDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(DeployNativeSqlite)" DestinationFolder="$(DeployDir)" SkipUnchangedFiles="true" />
+    <Exec Command="if exist &quot;$(OutputPath)runtimes&quot; xcopy /Y /Q /S /E /I &quot;$(OutputPath)runtimes&quot; &quot;$(DeployDir)runtimes&quot;" IgnoreExitCode="true" />
     <Copy SourceFiles="Bimwright.R27.addin" DestinationFolder="$(APPDATA)\Autodesk\Revit\Addins\2027\" SkipUnchangedFiles="true" />
   </Target>
 </Project>

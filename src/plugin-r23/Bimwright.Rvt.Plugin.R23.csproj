@@ -9,11 +9,6 @@
     <DefineConstants>REVIT2023</DefineConstants>
   </PropertyGroup>
 
-  <!-- Gate send_code_to_revit: only available in Debug builds -->
-  <PropertyGroup Condition="$(Configuration.StartsWith('Debug'))">
-    <DefineConstants>$(DefineConstants);ALLOW_SEND_CODE</DefineConstants>
-  </PropertyGroup>
-
   <!-- Revit 2023 API via Nice3point NuGet packages -->
   <ItemGroup>
     <PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="2023.1.70" PrivateAssets="all" />
@@ -44,10 +39,12 @@
       <DeployDir>$(APPDATA)\Autodesk\Revit\Addins\2023\Bimwright\</DeployDir>
     </PropertyGroup>
     <ItemGroup>
-      <DeployFiles Include="$(OutputPath)Bimwright.*.dll;$(OutputPath)Newtonsoft.Json.dll;$(OutputPath)Microsoft.CodeAnalysis*.dll;$(OutputPath)System.Collections.Immutable.dll;$(OutputPath)System.Reflection.Metadata.dll" />
+      <DeployFiles Include="$(OutputPath)Bimwright.*.dll;$(OutputPath)Newtonsoft.Json.dll;$(OutputPath)Microsoft.Data.Sqlite.dll;$(OutputPath)SQLitePCLRaw*.dll;$(OutputPath)Microsoft.CodeAnalysis*.dll;$(OutputPath)System.Collections.Immutable.dll;$(OutputPath)System.Reflection.Metadata.dll" />
+      <DeployNativeSqlite Include="$(OutputPath)runtimes\win-x64\native\e_sqlite3.dll" Condition="Exists('$(OutputPath)runtimes\win-x64\native\e_sqlite3.dll')" />
     </ItemGroup>
     <MakeDir Directories="$(DeployDir)" />
     <Copy SourceFiles="@(DeployFiles)" DestinationFolder="$(DeployDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(DeployNativeSqlite)" DestinationFolder="$(DeployDir)" SkipUnchangedFiles="true" />
     <Exec Command="if exist &quot;$(OutputPath)runtimes&quot; xcopy /Y /Q /S /E /I &quot;$(OutputPath)runtimes&quot; &quot;$(DeployDir)runtimes&quot;" IgnoreExitCode="true" />
     <Copy SourceFiles="Bimwright.R23.addin" DestinationFolder="$(APPDATA)\Autodesk\Revit\Addins\2023\" SkipUnchangedFiles="true" />
   </Target>

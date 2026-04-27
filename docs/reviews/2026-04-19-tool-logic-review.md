@@ -99,13 +99,13 @@ Fix options (any of):
 
 Fix: add a private `object _lock` and wrap `Save / IncrementCallCount / Remove / Load` in `lock (_lock) { ... }`. Cheap insurance.
 
-### M6 — `bake_tool` preview caps at 300 chars `[V]`
+### M6 — Legacy baking preview caps at 300 chars `[V]`
 
 **File:** `src/shared/Handlers/BakeToolHandler.cs:41`
 
 TaskDialog `MainContent` shows `code.Substring(0, 300) + "..."`. Malicious code can be benign for 300 chars then do `File.Delete(@"C:\Windows\*")` at char 301. User clicks Yes without seeing it.
 
-The `#if ALLOW_SEND_CODE` gate (Debug builds only) is the real security boundary — preview is UX, not enforcement. Still worth either (a) raising the cap / showing "preview truncated" or (b) changing the TaskDialog footer text to explicitly say "preview may hide later code — only bake code you trust completely".
+The old compile-time debug gate was the real security boundary — preview was UX, not enforcement. Still worth either (a) raising the cap / showing "preview truncated" or (b) changing the TaskDialog footer text to explicitly say "preview may hide later code — only bake code you trust completely".
 
 ---
 

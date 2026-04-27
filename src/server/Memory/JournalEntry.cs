@@ -1,4 +1,7 @@
 using System;
+using Bimwright.Rvt.Plugin;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace Bimwright.Rvt.Server.Memory
 {
@@ -21,10 +24,63 @@ namespace Bimwright.Rvt.Server.Memory
                 Tool = tool,
                 Success = success,
                 DurationMs = durationMs,
-                Error = error,
-                Params = paramsJson?.Length > 1024 ? paramsJson.Substring(0, 1024) : paramsJson,
-                Result = resultJson?.Length > 2048 ? resultJson.Substring(0, 2048) : resultJson
+                Error = RedactAndTruncate(error, 2048),
+                Params = RedactParams(tool, paramsJson),
+                Result = RedactResult(tool, resultJson)
             };
+        }
+
+        private static string RedactParams(string tool, string paramsJson)
+        {
+            if (!string.Equals(tool, "send_code_to_revit", StringComparison.OrdinalIgnoreCase))
+                return RedactAndTruncate(paramsJson, 1024);
+
+            var code = ExtractCodeBody(paramsJson);
+            return JsonConvert.SerializeObject(new
+            {
+                code_hash = BakeRedactor.HashBody(code),
+                code_length = code.Length
+            });
+        }
+
+        private static string RedactResult(string tool, string resultJson)
+        {
+            if (resultJson == null)
+                return null;
+
+            var redactResultFields = string.Equals(tool, "send_code_to_revit", StringComparison.OrdinalIgnoreCase);
+            return RedactAndTruncate(resultJson, 2048, redactResultFields);
+        }
+
+        private static string RedactAndTruncate(string value, int maxLength, bool redactResultFields = false)
+        {
+            if (value == null)
+                return null;
+
+            var redacted = BakeRedactor.RedactForBake(value, redactResultFields);
+            return redacted.Length > maxLength ? redacted.Substring(0, maxLength) : redacted;
+        }
+
+        private static string ExtractCodeBody(string paramsJson)
+        {
+            if (string.IsNullOrEmpty(paramsJson))
+                return string.Empty;
+
+            try
+            {
+                var obj = JObject.Parse(paramsJson);
+                var code = obj["code"];
+                if (code == null || code.Type == JTokenType.Null)
+                    return string.Empty;
+                if (code.Type == JTokenType.String)
+                    return code.Value<string>() ?? string.Empty;
+
+                return code.ToString(Formatting.None);
+            }
+            catch (JsonException)
+            {
+                return paramsJson;
+            }
         }
     }
 }

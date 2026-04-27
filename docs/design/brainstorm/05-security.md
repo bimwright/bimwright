@@ -17,7 +17,7 @@
 | Rate limit | 20 req / 10 seconds per connection | Both transports line 92, 120 |
 | Request timeout | 60 seconds | Both transports line 187, 215 |
 | Session logging | JSONL (disk) + ObservableCollection (RAM) + WPF UI | `McpLogger.cs`, `McpSessionLog.cs`, `HistoryWindow.cs` |
-| ToolBaker gate | `#if ALLOW_SEND_CODE` (Debug only) + TaskDialog user approval | `BakeToolHandler.cs:38-46` |
+| Adaptive bake gate | Runtime opt-in (`BIMWRIGHT_ENABLE_ADAPTIVE_BAKE` or config `enableAdaptiveBake`) + TaskDialog user approval | `SendCodeToRevitHandler.cs` |
 | Secret masking in logs | `sk-*`, Bearer tokens, api_key fields auto-masked | `src/shared/Security/SecretMasker.cs` |
 
 ## ToolBaker / send_code security — ✅ Decided 2026-04-16
@@ -32,13 +32,12 @@ After verifying code, the existing logic is sufficient — no complex sandbox ne
 
 **Bake time:**
 ```
-AI Agent (Claude/Haiku/GPT) generates C# code
-  ↓ MCP command bake_tool
-[BakeToolHandler.cs:38-46]
+AI Agent (Claude/Haiku/GPT) proposes C# code
+  ↓ adaptive-bake acceptance flow
+  ↓ runtime opt-in is required
   ↓ TaskDialog shows USER (Yes/No, default=No)
-  ↓ Code preview (first 300 chars + "...")
 User clicks No → fail, no compile
-User clicks Yes → Roslyn compile + register + persist .cs file + update registry.json
+User clicks Yes → accepted code can compile, register, and persist through the baked-tool registry
 ```
 
 **Startup (auto-load):**

@@ -7,7 +7,7 @@ Rough direction, not a commitment. Dates are intent; scope is firmer.
 - 28 MCP tools across 10 toolsets.
 - Progressive disclosure (`--toolsets`, `--read-only`).
 - `batch_execute` with Revit `TransactionGroup` semantics.
-- ToolBaker self-evolution (Debug only).
+- ToolBaker public tool exposure is opt-in by toolset, with adaptive-bake and `send_code_to_revit` execution gated by plugin-visible env/config plus per-call confirmation.
 - Security: loopback default, token auth, strict schema validation, path-leak mask.
 - Packaging: `dotnet tool` + per-year plugin ZIPs + `install.ps1`.
 - CI: matrix R22–R27 + server pack + xUnit.
@@ -24,8 +24,11 @@ Shipped on compile + one smoke test per Revit year.
 - **Testing & drift detection (aspect #7)** — _delivered 2026-04-18_ — golden snapshot of the MCP tool surface diffed on every test run; manual Haiku benchmark procedure (`benchmarks/`) with trigger rules and 15% regression threshold; S4 response-size observability hook (passive stderr warning, no enforcement).
 - **View-naming lint (L-05 + L-13)** — _delivered 2026-04-23 (v0.2.1)_ — 3 new read-only tools in a new `lint` toolset (default on): `analyze_view_naming_patterns`, `suggest_view_name_corrections`, `detect_firm_profile`. Firm-profile library scaffolding in place (`docs/firm-profiles/README.md`); no profiles shipped yet.
 
-## v0.3 — ecosystem + async
+## v0.3 — ToolBaker redesign + ecosystem
 
+- **ToolBaker redesign** — adaptive bake is default off, local-only, and suggestion-driven. `bake_tool` is removed; new bakes flow through measured suggestions and `accept_bake_suggestion`.
+- **Accepted-tool indirection** — accepted baked tools are discovered with `list_baked_tools` and executed with `run_baked_tool name=<tool_name>`. v0.3.x does not promote baked tools into the native tool list.
+- **Gap draft status** — `dismiss_bake_suggestion` can turn repeated send-code patterns into a local GitHub issue draft URL for user review. Bimwright does not submit the issue or send telemetry.
 - **Async job polling (A8)** — long-running Revit operations (full-model recompute, export-to-IFC, large family load) currently block the 30 s response timeout. Add a `jobs/status/<id>` pattern so the model can fire and check later.
 - **Aggregator listings** — submit to Smithery, mcp.so, PulseMCP, MCP Market, Cline's registry, MseeP. Each has its own metadata format; roll changes through `server.json` first where possible.
 - **Prompt library** — reintroduce the `MCP prompts` feature that was stripped from v0.1.0 (the original lived in `RevitPrompts.cs` before the fresh-repo split). Generic prompts only this time; no project-specific DB coupling.
@@ -50,7 +53,7 @@ Shipped on compile + one smoke test per Revit year.
 Current v0.1.0 hardening covers launch-day concerns. Deferred:
 
 - **S4 pagination** — tool responses can be large (100-item DTO arrays). No pagination contract yet; client is on its own for chunking.
-- **Signed ToolBaker bakes** — baked tools persist to SQLite without signing. A malicious user with write access to the SQLite file could inject code. Acceptable for single-user dev; v1.0 territory for shared environments.
+- **Signed ToolBaker bakes** — baked tools now persist in server-owned SQLite metadata under `%LOCALAPPDATA%\Bimwright\bake.db`, but accepted bake artifacts are not signed. A malicious same-user process with file-write access to local Bimwright storage could still tamper with local artifacts. Signed-bake verification remains planned hardening work; acceptable for single-user dev, v1.0 territory for shared environments.
 - **LAN bind warning** — `BIMWRIGHT_ALLOW_LAN_BIND=1` flips to `0.0.0.0` with only a stderr warning. Consider requiring a second env var or confirming on first run.
 
 If you're running Bimwright in an environment where any of these matter, open an issue — it helps prioritize.

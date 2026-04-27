@@ -113,7 +113,7 @@ Every error response MUST follow the envelope:
 
 ## ToolBaker — Enforce Template
 
-When ToolBaker (`bake_tool`) creates a new tool, the pipeline MUST:
+When ToolBaker creates a new tool, the pipeline MUST:
 
 1. **Ask the caller for a description following the 4-part template** (Summary + USE WHEN + DON'T USE WHEN + Example).
 2. **Validate Example exists** — reject tools missing Example with: "Tool description must include at least one Example with real parameter values."

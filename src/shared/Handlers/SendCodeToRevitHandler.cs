@@ -17,16 +17,21 @@ namespace Bimwright.Rvt.Plugin.Handlers
 
         public CommandResult Execute(UIApplication app, string paramsJson)
         {
-#if !ALLOW_SEND_CODE
-            return CommandResult.Fail(
-                "send_code_to_revit is disabled in this build. " +
-                "It is only available in Debug builds with ALLOW_SEND_CODE defined.");
-#else
+            var config = BimwrightConfig.Load();
+            if (!config.EnableAdaptiveBakeOrDefault)
+            {
+                return Fail(
+                    "send_code_to_revit is gated by EnableAdaptiveBake. " +
+                    "Set BIMWRIGHT_ENABLE_ADAPTIVE_BAKE=1 for the Revit plugin process or set " +
+                    "\"enableAdaptiveBake\": true in %LOCALAPPDATA%\\Bimwright\\bimwright.config.json " +
+                    "after reviewing the BIMwright adaptive bake safety prompt.");
+            }
+
             var request = JObject.Parse(paramsJson);
             var code = request.Value<string>("code");
 
             if (string.IsNullOrWhiteSpace(code))
-                return CommandResult.Fail("code parameter is required.");
+                return Fail("code parameter is required.");
 
             // Runtime confirmation dialog
             var preview = code.Length > 500 ? code.Substring(0, 500) + "\n...(truncated)" : code;
@@ -40,7 +45,7 @@ namespace Bimwright.Rvt.Plugin.Handlers
             };
             var result = dlg.Show();
             if (result != Autodesk.Revit.UI.TaskDialogResult.Yes)
-                return CommandResult.Fail("User denied dynamic code execution.");
+                return Fail("User denied dynamic code execution.");
 
             // Wrap user code in a class if it doesn't contain one
             var fullCode = code;
@@ -94,7 +99,7 @@ public class McpDynamicScript
                             .Select(d => d.ToString())
                             .Take(5)
                             .ToArray();
-                        return CommandResult.Fail("Compilation failed:\n" + string.Join("\n", errors));
+                        return Fail("Compilation failed:\n" + string.Join("\n", errors));
                     }
 
                     ms.Seek(0, SeekOrigin.Begin);
@@ -102,29 +107,33 @@ public class McpDynamicScript
                     var type = assembly.GetType("McpDynamicScript");
 
                     if (type == null)
-                        return CommandResult.Fail("Class 'McpDynamicScript' not found. Ensure your code defines this class with a static Run(UIApplication) method.");
+                        return Fail("Class 'McpDynamicScript' not found. Ensure your code defines this class with a static Run(UIApplication) method.");
 
                     var method = type.GetMethod("Run", BindingFlags.Public | BindingFlags.Static);
                     if (method == null)
-                        return CommandResult.Fail("Method 'Run(UIApplication)' not found in McpDynamicScript.");
+                        return Fail("Method 'Run(UIApplication)' not found in McpDynamicScript.");
 
                     var output = method.Invoke(null, new object[] { app });
-                    return CommandResult.Ok(new
+                    return CommandResult.Ok(McpResponsePrivacy.RedactDataForResponse(Name, new
                     {
                         executed = true,
                         result = output?.ToString() ?? "(null)"
-                    });
+                    }));
                 }
             }
             catch (TargetInvocationException ex)
             {
-                return CommandResult.Fail($"Runtime error: {ex.InnerException?.Message ?? ex.Message}");
+                return Fail($"Runtime error: {ex.InnerException?.Message ?? ex.Message}");
             }
             catch (Exception ex)
             {
-                return CommandResult.Fail($"Error: {ex.Message}");
+                return Fail($"Error: {ex.Message}");
             }
-#endif
+        }
+
+        private static CommandResult Fail(string error)
+        {
+            return CommandResult.Fail(McpResponsePrivacy.RedactErrorForResponse(error));
         }
     }
 }

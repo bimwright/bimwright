@@ -138,6 +138,49 @@ namespace Bimwright.Rvt.Tests
         }
 
         [Fact]
+        public void Run_BakedCommandName_RejectedBeforeInvoke()
+        {
+            var invoked = false;
+            var cmds = Cmds(("custom_baked_command", new { value = 1 }));
+
+            var outcome = BatchExecutor.Run(
+                cmds,
+                continueOnError: false,
+                (_, __) =>
+                {
+                    invoked = true;
+                    return BatchExecutor.InvokeResult.Ok(null);
+                },
+                isBakedCommand: name => name == "custom_baked_command");
+
+            Assert.True(outcome.AnyFailed);
+            Assert.False(invoked);
+            var result = JObject.FromObject(outcome.Results[0]);
+            Assert.Equal("Baked tool 'custom_baked_command' cannot be run through batch_execute. Use run_baked_tool instead.", result.Value<string>("error"));
+        }
+
+        [Fact]
+        public void Run_RunBakedToolCommand_RejectedBeforeInvoke()
+        {
+            var invoked = false;
+            var cmds = Cmds(("run_baked_tool", new { name = "custom_baked_command", @params = new { value = 1 } }));
+
+            var outcome = BatchExecutor.Run(
+                cmds,
+                continueOnError: false,
+                (_, __) =>
+                {
+                    invoked = true;
+                    return BatchExecutor.InvokeResult.Ok(null);
+                });
+
+            Assert.True(outcome.AnyFailed);
+            Assert.False(invoked);
+            var result = JObject.FromObject(outcome.Results[0]);
+            Assert.Equal("run_baked_tool cannot be invoked through batch_execute; call run_baked_tool directly.", result.Value<string>("error"));
+        }
+
+        [Fact]
         public void Run_HandlerThrows_CapturedAsFailure()
         {
             var dispatch = Dispatch(new Dictionary<string, Func<string, BatchExecutor.InvokeResult>>

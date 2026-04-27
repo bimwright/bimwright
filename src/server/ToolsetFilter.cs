@@ -56,6 +56,9 @@ namespace Bimwright.Rvt.Server
                 foreach (var w in WriteCapable) set.Remove(w);
             }
 
+            if (config != null && !config.EnableToolbakerOrDefault)
+                set.Remove("toolbaker");
+
             return set;
         }
     }

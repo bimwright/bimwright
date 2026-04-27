@@ -35,6 +35,19 @@ namespace Bimwright.Rvt.Tests
             Assert.Equal(ToolsetFilter.DefaultOn.OrderBy(s => s), set.OrderBy(s => s));
         }
 
+        [Fact]
+        public void Resolve_AdaptiveBakeFlags_DoNotChangeDefaultToolsets()
+        {
+            var set = ToolsetFilter.Resolve(new BimwrightConfig
+            {
+                EnableAdaptiveBake = true,
+                CacheSendCodeBodies = true,
+            });
+
+            Assert.Equal(ToolsetFilter.DefaultOn.OrderBy(s => s), set.OrderBy(s => s));
+            Assert.DoesNotContain("toolbaker", set);
+        }
+
         // --- Explicit toolsets --------------------------------------------
 
         [Fact]
@@ -131,6 +144,29 @@ namespace Bimwright.Rvt.Tests
             });
             Assert.Single(set);
             Assert.Contains("query", set);
+        }
+
+        [Fact]
+        public void Resolve_DisableToolbaker_RemovesToolbakerEvenWhenRequested()
+        {
+            var set = ToolsetFilter.Resolve(new BimwrightConfig
+            {
+                Toolsets = new List<string> { "toolbaker" },
+                EnableToolbaker = false,
+            });
+
+            Assert.DoesNotContain("toolbaker", set);
+        }
+
+        [Fact]
+        public void Resolve_EnableToolbaker_DoesNotAddToolbakerToDefaults()
+        {
+            var set = ToolsetFilter.Resolve(new BimwrightConfig
+            {
+                EnableToolbaker = true,
+            });
+
+            Assert.DoesNotContain("toolbaker", set);
         }
 
         // --- Invariants ---------------------------------------------------
