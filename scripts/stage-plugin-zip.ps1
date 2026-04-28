@@ -83,16 +83,19 @@ foreach ($s in $shells) {
             Copy-Item -Destination $destDir -Force
     }
 
-    # Native SQLite runtimes folder (R25+ puts native binaries here).
+    # Native SQLite runtime. Revit is Windows x64 only for this package, so do
+    # not ship Linux/macOS/wasm native assets from Microsoft.Data.Sqlite.
     $runtimesSrc = Join-Path $binDir 'runtimes'
     if (Test-Path $runtimesSrc) {
-        Copy-Item -Path $runtimesSrc -Destination $destDir -Recurse -Force
-
-        # Revit add-ins are not launched by dotnet.exe, so native assets under
-        # runtimes/win-x64/native are not always resolved by the host. Keep a
-        # root copy beside Bimwright.Rvt.Plugin.dll for Microsoft.Data.Sqlite.
         $nativeSqlite = Join-Path $runtimesSrc 'win-x64\native\e_sqlite3.dll'
         if (Test-Path $nativeSqlite) {
+            $nativeDest = Join-Path $destDir 'runtimes\win-x64\native'
+            New-Item -ItemType Directory -Path $nativeDest -Force | Out-Null
+            Copy-Item -Path $nativeSqlite -Destination $nativeDest -Force
+
+            # Revit add-ins are not launched by dotnet.exe, so native assets under
+            # runtimes/win-x64/native are not always resolved by the host. Keep a
+            # root copy beside Bimwright.Rvt.Plugin.dll for Microsoft.Data.Sqlite.
             Copy-Item -Path $nativeSqlite -Destination $destDir -Force
         }
     }

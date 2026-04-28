@@ -20,6 +20,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -113,6 +114,12 @@ namespace Bimwright.Rvt.Server
         {
             var enabled = ToolsetFilter.Resolve(config);
             var builder = Host.CreateApplicationBuilder();
+            // stdio MCP stdout must contain JSON-RPC only. ClearProviders() removes default
+            // host logging, but the MCP SDK (and any transitive package) may re-add a Console
+            // provider that writes to stdout. AddConsole with LogToStandardErrorThreshold=Trace
+            // forces every console log line — from any provider re-added downstream — to stderr.
+            builder.Logging.ClearProviders();
+            builder.Logging.AddConsole(opts => opts.LogToStandardErrorThreshold = LogLevel.Trace);
             var mcp = builder.Services
                 .AddMcpServer()
                 .WithStdioServerTransport();
@@ -173,7 +180,7 @@ namespace Bimwright.Rvt.Server
                 "                          Default: auto-detect via discovery files in %LOCALAPPDATA%\\Bimwright\\.",
                 "",
                 "Tool exposure (A3 Progressive Disclosure):",
-                "  --toolsets <csv>        Comma list of toolsets to enable. Default: query,create,view,meta.",
+                "  --toolsets <csv>        Comma list of toolsets to enable. Default: query,create,view,meta,lint.",
                 "                          Known toolsets: " + string.Join(", ", ToolsetFilter.KnownToolsets),
                 "                          Use 'all' to expose every toolset.",
                 "  --read-only             Shortcut that excludes create, modify, and delete toolsets.",

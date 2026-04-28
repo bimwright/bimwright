@@ -18,7 +18,7 @@ The Revit API itself is pulled from [Nice3point.Revit.Api.*](https://www.nuget.o
 
 ```bash
 git clone https://github.com/bimwright/rvt-mcp.git
-cd bimwright
+cd rvt-mcp
 dotnet build src/Bimwright.Rvt.sln -c Debug
 ```
 
@@ -40,7 +40,7 @@ Tests are pure .NET 8 xUnit, no Revit dependency — they cover `ErrorSanitizer`
 pwsh scripts/stage-plugin-zip.ps1 -Config Release
 ```
 
-Produces `build/plugin-zip/Bimwright.Rvt.Plugin.R{22..27}.zip`. CI does this for you on every push.
+Produces `build/plugin-zip/Bimwright.Rvt.Plugin.R{22..27}.zip`. Run this before cutting a plugin release bundle.
 
 ## Project layout
 
@@ -49,7 +49,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the conceptual model. Quick reference
 | Path | What lives here |
 |------|-----------------|
 | `src/server/` | MCP server, tool registration, stdio/HttpSse entry points |
-| `src/shared/Handlers/` | One file per MCP tool handler (28 total) |
+| `src/shared/Handlers/` | One file per Revit command handler; 32 MCP tools by default, 35 with adaptive bake enabled |
 | `src/shared/Infrastructure/` | `CommandDispatcher`, `McpEventHandler`, `SchemaValidator`, `BatchExecutor` |
 | `src/shared/Transport/` | `ITransportServer`, TCP + Named Pipe implementations |
 | `src/shared/Security/` | `AuthToken`, `ErrorSanitizer`, `SecretMasker` |
@@ -114,7 +114,7 @@ Procedure: see `benchmarks/README.md`. The benchmark uses Claude Code to spawn a
 A ≥15% param-accuracy drop vs the last baseline blocks merge until the regression is understood. Smaller drops are human-review.
 
 ### Client compatibility
-Primary verified clients: Claude CLI, Claude Desktop. Other clients (Cursor, Cline, Windsurf, Continue, Zed): no automated tests. If you hit a client-specific bug, open an issue with a minimal repro; we will add a regression test once the behaviour is understood.
+Primary verified clients are documented in `README.md` and `AGENTS.md`. Client wiring is not fully automated in tests; if you hit a client-specific bug, open an issue with a minimal repro so we can add regression coverage once the behavior is understood.
 
 ### Naming convention
 Tool names and parameter keys use `snake_case`. We do not maintain aliases for tool names from other Revit-MCP implementations. If you are migrating from another implementation and a specific name mismatch is blocking you, open an issue — we will consider aliases when three or more users request the same one.

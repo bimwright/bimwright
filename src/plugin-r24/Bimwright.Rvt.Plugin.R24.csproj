@@ -11,8 +11,8 @@
 
   <!-- Revit 2024 API via Nice3point NuGet packages -->
   <ItemGroup>
-    <PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="2024.1.70" PrivateAssets="all" />
-    <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="2024.1.70" PrivateAssets="all" />
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="2024.2.0" PrivateAssets="all" />
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="2024.2.0" PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup>

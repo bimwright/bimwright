@@ -11,8 +11,8 @@
 
   <!-- Revit 2023 API via Nice3point NuGet packages -->
   <ItemGroup>
-    <PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="2023.1.70" PrivateAssets="all" />
-    <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="2023.1.70" PrivateAssets="all" />
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="2023.1.80" PrivateAssets="all" />
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="2023.1.80" PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup>

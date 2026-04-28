@@ -45,10 +45,10 @@ Goal: lock test parameters, create the finding-log file, confirm the fresh machi
 Goal: follow the public README instructions exactly — no prior knowledge, no shortcuts, no "I know this part" skips. Log every friction point verbatim.
 
 - [ ] F2-001: Install .NET SDK per README (version required for running the MCP server). Log: was the required SDK version clearly specified? Did the link work? Install time. Any PATH/env issues.
-- [ ] F2-002: Install the Bimwright plugin for the primary Revit version — following README install method (expected: download plugin ZIP from the Release page, extract to `%APPDATA%\Autodesk\Revit\Addins\<year>\Bimwright\`, addin manifest at parent level). Log: was the path clear? Did the ZIP contain everything needed? Any DLL loading errors on next Revit launch.
+- [ ] F2-002: Install the Bimwright plugin for the primary Revit version — following README install method (expected: download plugin bundle from the Release page, run `install.ps1 -SourceDir . -WhatIf`, then run without `-WhatIf` after reviewing the preview). Log: was the path clear? Did the ZIP contain everything needed? Any DLL loading errors on next Revit launch.
 - [ ] F2-003: Install the Bimwright MCP server — following README (expected: NuGet global tool install `dotnet tool install -g Bimwright.Rvt.Server`, or direct from Release assets). Log: did the command work first-try? Any NuGet source issues. Install time.
 - [ ] F2-004: Install / configure the MCP client (Claude Code CLI) to register the Bimwright server. Log: where does the client config file live? Was the `.mcp.json.example` snippet in the README copy-pasteable? Any token/auth setup needed on first run.
-- [ ] F2-005: Open Revit, verify the Bimwright ribbon panel appears without error dialog, verify the "Start MCP" button is clickable and the server starts. Log: any startup error dialogs (screenshots). Discovery file presence at `%LOCALAPPDATA%\RevitMcp\` — name + content.
+- [ ] F2-005: Open Revit, verify the Bimwright ribbon panel appears without error dialog, verify the "Start MCP" button is clickable and the server starts. Log: any startup error dialogs (screenshots). Discovery file presence at `%LOCALAPPDATA%\Bimwright\` — name + content.
 - [ ] F2-006: Total time from first-click on README to "server running + ribbon visible". Friction-point summary (ranked by severity) appended to the finding-log §F2.
 
 ## Phase F3 — Functional smoke, primary version (3 tasks)

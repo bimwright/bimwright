@@ -224,6 +224,7 @@ if (-not $Years -or $Years.Count -eq 0) {
 
 $handled = @()
 $skipped = @()
+$previewed = @()
 
 foreach ($year in $Years) {
     $yearTwo = "{0:D2}" -f ($year - 2000)   # 2023 -> 23
@@ -247,8 +248,13 @@ foreach ($year in $Years) {
             $didSomething = $true
         }
         if ($didSomething) {
-            Write-Host ("[R{0}] uninstalled from {1}" -f $yearTwo, $addinsRoot)
-            $handled += "R$yearTwo"
+            if ($WhatIfPreference) {
+                Write-Host ("[R{0}] preview uninstall from {1}" -f $yearTwo, $addinsRoot)
+                $previewed += "R$yearTwo"
+            } else {
+                Write-Host ("[R{0}] uninstalled from {1}" -f $yearTwo, $addinsRoot)
+                $handled += "R$yearTwo"
+            }
         } else {
             Write-Host ("[R{0}] nothing to remove at {1}" -f $yearTwo, $addinsRoot)
             $skipped += "R$yearTwo"
@@ -305,8 +311,13 @@ foreach ($year in $Years) {
         Move-Item -Path $extractedAddin -Destination $addinPath -Force
     }
 
-    Write-Host ("[R{0}] installed -> {1}" -f $yearTwo, $pluginDir)
-    $handled += "R$yearTwo"
+    if ($WhatIfPreference) {
+        Write-Host ("[R{0}] preview install -> {1}" -f $yearTwo, $pluginDir)
+        $previewed += "R$yearTwo"
+    } else {
+        Write-Host ("[R{0}] installed -> {1}" -f $yearTwo, $pluginDir)
+        $handled += "R$yearTwo"
+    }
 }
 
 # --- Optional host wiring (v0.1.1) ---
@@ -336,7 +347,10 @@ Write-Host ""
 Write-Host "=== install.ps1 summary ==="
 Write-Host ("Mode   : {0}" -f ($(if ($Uninstall) { 'Uninstall' } else { 'Install' })))
 Write-Host ("Years  : {0}" -f ($Years -join ', '))
-Write-Host ("Handled: {0}" -f ($handled -join ', '))
+Write-Host ("Handled: {0}" -f ($(if ($handled.Count -gt 0) { $handled -join ', ' } else { 'none' })))
+if ($previewed.Count -gt 0) {
+    Write-Host ("Previewed: {0}" -f ($previewed -join ', '))
+}
 if ($skipped.Count -gt 0) {
     Write-Host ("Skipped: {0}" -f ($skipped -join ', '))
 }

@@ -6,8 +6,8 @@ Security updates are provided for the latest minor release series only.
 
 | Version | Supported |
 |---------|-----------|
-| 0.1.x   | ✓         |
-| < 0.1   | ✗         |
+| 0.3.x   | ✓         |
+| < 0.3   | ✗         |
 
 ## Threat Model
 
@@ -45,13 +45,13 @@ bimwright runs on `127.0.0.1` only. The attack surface is:
 ### Network binding
 - TCP listener: `127.0.0.1` only (not `0.0.0.0`).
 - Named Pipe: local machine scope.
-- HTTP SSE path (reserved for future use): `127.0.0.1` only, middleware rejects non-localhost `Host` headers.
-- A future `--allow-lan-bind` flag will gate any non-localhost binding explicitly.
+- HTTP SSE path: `127.0.0.1` only, middleware rejects non-localhost `Host` headers.
+- Any non-localhost plugin bind requires explicit `BIMWRIGHT_ALLOW_LAN_BIND=1` opt-in.
 
 ### Dynamic code paths (`send_code_to_revit`, ToolBaker)
 - `send_code_to_revit` is Release-capable only after explicit adaptive-bake opt-in visible to the Revit plugin: set `BIMWRIGHT_ENABLE_ADAPTIVE_BAKE=1` in the plugin process environment, or set `enableAdaptiveBake` to `true` in `%LOCALAPPDATA%\Bimwright\bimwright.config.json`.
 - Each `send_code_to_revit` invocation still requires the existing per-call Revit TaskDialog confirmation before code executes.
-- ToolBaker bakes require user approval per tool + operate under the host Revit process trust boundary. Production hardening (sandboxed assembly context, signed-bake verification) is tracked in the v0.2 roadmap (aspect #5 gaps G1–G4).
+- ToolBaker bakes require user approval per tool + operate under the host Revit process trust boundary. Production hardening, including signed-bake verification, remains tracked as v1.0 hardening work.
 
 ## Reporting a vulnerability
 
