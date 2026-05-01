@@ -9,32 +9,92 @@
 <p align="center">
   <a href="https://github.com/bimwright/rvt-mcp/actions/workflows/build.yml"><img src="https://github.com/bimwright/rvt-mcp/actions/workflows/build.yml/badge.svg" alt="build" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="license" /></a>
-  <a href="#supported-revit-versions"><img src="https://img.shields.io/badge/.NET-4.8%20%7C%208%20%7C%2010-512BD4" alt=".NET" /></a>
+  <a href="#supported-revit-versions"><img src="https://img.shields.io/badge/Revit-2022--2027-186BFF" alt="Revit 2022-2027" /></a>
+  <a href="#toolsets"><img src="https://img.shields.io/badge/MCP-32%20tools%20%7C%2035%20adaptive-6C47FF" alt="MCP tools" /></a>
 </p>
 
 <p align="center">
-  📖 English · <a href="README.vi.md">Tiếng Việt</a> · <a href="README.zh-CN.md">简体中文</a>
+  English · <a href="README.vi.md">Tiếng Việt</a> · <a href="README.zh-CN.md">简体中文</a>
 </p>
 
 ---
 
-I built this because I got tired of clicking.
+## Revit Automation Should Not Stop At "I Don't Code"
 
-You know the scene: 5 PM, your BIM Manager messages *"rename everything to the new standard"* — L01 - Basement, L02 - Commercial, on and on. The model has a few thousand elements. Doing it by hand is out. Writing a Dynamo script takes half a day. That's the itch.
+Before AI agents, many BIM users already wanted the same thing: make Revit faster, remove repetitive clicks, and shape the software around the way they actually work.
 
-**rvt-mcp** is an add-in that sits next to Revit 2022–2027. You tell Claude (or Cursor, Codex, OpenCode — whatever agent you use) what you want done, it calls one of 32 local tools, and Revit runs the thing inside a single transaction. Not happy? **Ctrl+Z** — one step, everything rolls back.
+The hard part was never the idea. The hard part was turning the idea into a tool.
 
-No cloud. Nothing leaves your machine. Apache-2.0, pure C#.
+To build even a small Revit add-in, a practitioner usually has to:
 
-> 🤖 **Using an AI agent?** Point it at [AGENTS.md](AGENTS.md) — it'll install the server, the plugin, and wire your MCP client, previewing each step before it touches anything. You still need Revit and .NET 8 SDK on the machine.
+- Define the input and output clearly enough for software.
+- Think through the algorithm, edge cases, parameters, categories, filters, units, and Revit API constraints.
+- Prototype in Dynamo, maybe move to Python, then eventually rewrite in C# when the workflow needs to become stable.
+- Package the result as an add-in, handle dependencies, install paths, `.addin` manifests, Revit version drift, and ribbon buttons.
 
-A few things I care about:
+That is a lot of work for someone who studied architecture, structure, MEP, quantity takeoff, or BIM coordination - not software engineering.
 
-- **Every Revit year from 2022 to 2027.** One codebase, six plugin shells (.NET 4.8 → .NET 10). Compile gate is 6/6, core runtime coverage exists for R23–R26, and the accepted ToolBaker path has now been smoke-tested on R22, R26, and R27.
-- **Pure C#, Apache-2.0.** No Node.js on the Revit machine. License is enterprise-safe, dependency graph audits cleanly.
-- **Atomic batches.** `batch_execute` wraps a whole command list in one `TransactionGroup`. One undo step. If any command in the batch fails, the whole group rolls back — you never end up with a half-applied edit.
-- **Weak models don't drown.** `--toolsets` + `--read-only` gate what the agent can see. A Haiku-sized model doesn't need to know about `delete_element` when you asked it to pull quantities.
-- **Self-shaping toolkit, opt-in.** Adaptive bake is off by default. When enabled, repeated local usage can become a suggestion you accept into your own baked-tool registry. Accepted tools are available from the Revit ribbon and through `list_baked_tools` / `run_baked_tool`, with compatibility recorded per Revit version.
+The usual options are expensive in different ways:
+
+- Spend months learning enough coding to maintain your own tools.
+- Pay someone to build custom add-ins.
+- Buy fixed add-ins and adapt your workflow to the vendor's assumptions.
+- Stay with manual work because the automation path is too much friction.
+
+`rvt-mcp` exists to compress that loop.
+
+It gives AI agents a safe local bridge into Revit, then lets repeated workflows evolve into personal tools through ToolBaker. The goal is not one universal add-in for everyone. Revit serves too many disciplines, offices, standards, and habits for that. The goal is a system where each practitioner can grow a toolkit that matches their own work.
+
+Personal automation should be personal.
+
+---
+
+## What rvt-mcp Is
+
+`rvt-mcp` is a local MCP gateway for Autodesk Revit 2022-2027.
+
+It has two parts:
+
+- `Bimwright.Rvt.Server`: a .NET 8 MCP server launched by Claude, Cursor, Codex, OpenCode, Cline, VS Code Copilot, or another stdio MCP client.
+- `Bimwright.Rvt.Plugin`: a Revit add-in shell for each supported Revit year, running inside Revit and executing commands on the Revit UI thread.
+
+The agent talks MCP. The server talks to the plugin over localhost TCP or Named Pipe. The plugin talks to the Revit API.
+
+Your model stays on your machine.
+
+---
+
+## Why It Matters
+
+AI agents make it possible for BIM users to describe intent instead of writing code by hand. But intent alone is not enough. Revit automation still needs a runtime that understands transactions, parameters, units, selection, model state, version drift, safety, and rollback.
+
+`rvt-mcp` is that runtime.
+
+It is designed around four ideas:
+
+- **Local first.** No cloud bridge is required. Revit, the plugin, MCP server, logs, and ToolBaker storage all live on the user's machine.
+- **Reversible by default.** Mutating workflows can run through `batch_execute`, wrapping multiple commands in one Revit `TransactionGroup` so one undo step rolls the batch back.
+- **Progressively exposed.** Toolsets and `--read-only` mode control what the agent can see and do. Weak or narrow agents do not need destructive tools.
+- **Personal over generic.** Adaptive ToolBaker can observe repeated local workflows, propose a personal tool, and make accepted tools available through MCP and the Revit ribbon.
+
+This is not a black-box demo and not courseware. It is public Apache-2.0 code. Claims should be checked by building, testing, running, and reading the source.
+
+---
+
+## The ToolBaker Loop
+
+Most Revit automation dies between "good idea" and "usable add-in".
+
+ToolBaker is the path from agent-assisted workflow to personal tool:
+
+1. Use the existing MCP tools to query, create, lint, inspect, or batch operations in Revit.
+2. When advanced automation is needed, opt into the `toolbaker` surface and enable adaptive bake before using `send_code_to_revit` with explicit Revit confirmation.
+3. If adaptive bake is enabled, repeated local usage is recorded locally under `%LOCALAPPDATA%\Bimwright\`.
+4. Repeated patterns become suggestions, visible through `list_bake_suggestions`.
+5. You explicitly accept a suggestion with `accept_bake_suggestion`, including the tool name, schema, and output choice.
+6. Accepted tools become callable through `list_baked_tools` / `run_baked_tool` and available from the Revit ribbon runtime cache.
+
+Adaptive bake is off by default. It is for users who want their own local usage data to shape their own tools.
 
 ---
 
@@ -81,49 +141,65 @@ A few things I care about:
 +---------------------------+
 ```
 
-`rvt-mcp` is a **full C# MCP stack**. The MCP server, per-version Revit plugin shells, transport bridge, command handlers, DTO mapping, and ToolBaker pipeline are all written in C# using the official MCP C# SDK. There is no Node.js sidecar on the Revit machine — just .NET + Revit.
+`rvt-mcp` is a full C# MCP stack. The MCP server, per-version Revit plugin shells, transport bridge, command handlers, DTO mapping, and ToolBaker pipeline are all written in C# using the official MCP C# SDK.
 
-That matters because many MCP examples and servers in the ecosystem are built around a Node.js/TypeScript runtime. This project is not. For Revit shops, that means one language, one build chain, and a simpler story for debugging, auditing, and deployment. The version split is explicit at the edge: one thin plugin shell per Revit year, all compiling the same `src/shared/` source glob. See [ARCHITECTURE.md](ARCHITECTURE.md) for the full deep-dive.
+There is no Node.js sidecar on the Revit machine.
+
+The version split is explicit at the edge: one thin plugin shell per Revit year, all compiling the same `src/shared/` source glob. See [ARCHITECTURE.md](ARCHITECTURE.md) for the threading, transport, DTO, and ToolBaker details.
+
+---
+
+## Current State
+
+`rvt-mcp` is usable but still young.
+
+- Compile gate covers Revit R22-R27 plugin shells.
+- Unit tests cover pure .NET logic, tool-surface snapshots, ToolBaker storage/policy paths, config, logging, privacy, and batching behavior.
+- Core runtime coverage exists for R23-R26.
+- Accepted ToolBaker list/run/ribbon path has smoke evidence on R22, R26, and R27.
+- Fresh-machine install testing is tracked in [docs/testing/fresh-install-checklist.md](docs/testing/fresh-install-checklist.md).
+
+Treat it like serious open-source infrastructure: test it on your own environment before trusting it on production models.
 
 ---
 
 ## Project Structure
 
-```
+```text
 rvt-mcp/
 ├── src/
 │   ├── Bimwright.Rvt.sln         # Solution (server + 6 plugin shells)
-│   ├── server/                   # Bimwright.Rvt.Server — .NET 8 global tool, stdio MCP
+│   ├── server/                   # Bimwright.Rvt.Server - .NET 8 global tool, stdio MCP
 │   ├── shared/                   # Source glob shared by every plugin shell
-│   │   ├── Handlers/             # One file per tool (create_grid, send_code, …)
+│   │   ├── Handlers/             # One file per Revit command handler
 │   │   ├── Commands/             # Revit ribbon commands
-│   │   ├── ToolBaker/            # Self-evolution engine (baked-tool registry/runtime)
-│   │   ├── Transport/            # TCP (R22–R24) + Named Pipe (R25–R27) abstraction
-│   │   ├── Infrastructure/       # CommandDispatcher, ExternalEvent marshalling
-│   │   └── Security/             # Auth token, secret masking
-│   ├── plugin-r22/               # Revit 2022 shell — .NET 4.8, TCP
-│   ├── plugin-r23/               # Revit 2023 shell — .NET 4.8, TCP
-│   ├── plugin-r24/               # Revit 2024 shell — .NET 4.8, TCP
-│   ├── plugin-r25/               # Revit 2025 shell — .NET 8, Named Pipe
-│   ├── plugin-r26/               # Revit 2026 shell — .NET 8, Named Pipe
-│   └── plugin-r27/               # Revit 2027 shell — .NET 10, Named Pipe
-├── tests/                        # Golden snapshot + Haiku benchmark + policy tests
-├── benchmarks/                   # Weak-model (Haiku) accuracy harness
-├── scripts/                      # stage-plugin-zip.ps1, install.ps1, uninstall-all.ps1
-├── docs/                         # Brainstorms, reviews, ADRs
+│   │   ├── ToolBaker/            # Baked-tool registry/runtime/policy
+│   │   ├── Transport/            # TCP + Named Pipe abstraction
+│   │   ├── Infrastructure/       # Dispatcher, schema validation, ExternalEvent marshal
+│   │   └── Security/             # Auth token, redaction, secret masking
+│   ├── plugin-r22/               # Revit 2022 shell - .NET 4.8, TCP
+│   ├── plugin-r23/               # Revit 2023 shell - .NET 4.8, TCP
+│   ├── plugin-r24/               # Revit 2024 shell - .NET 4.8, TCP
+│   ├── plugin-r25/               # Revit 2025 shell - .NET 8, Named Pipe
+│   ├── plugin-r26/               # Revit 2026 shell - .NET 8, Named Pipe
+│   └── plugin-r27/               # Revit 2027 shell - .NET 10, Named Pipe
+├── tests/                        # xUnit, tool snapshots, policy/privacy tests
+├── benchmarks/                   # Weak-model accuracy harness
+├── scripts/                      # install, uninstall, plugin ZIP staging
+├── docs/                         # Architecture, roadmap, ToolBaker, testing notes
 ├── server.json                   # MCP registry manifest
-├── smithery.yaml                 # Smithery aggregator manifest
-├── AGENTS.md                     # Agent-led install guide (9 host clients)
-└── ARCHITECTURE.md               # Deep-dive on threading + transport + DTOs
+├── smithery.yaml                 # Smithery directory manifest
+├── AGENTS.md                     # Agent-led install guide for MCP clients
+└── ARCHITECTURE.md               # Deep dive on runtime architecture
 ```
 
-Six plugin shells compile from the same `src/shared/` glob — year-specific `#if` fences handle Revit API drift (`ElementId.IntegerValue` → `.Value` in R26+, WPF in R27).
+Six plugin shells compile from the same `src/shared/` glob. Year-specific `#if` fences handle Revit API drift such as `ElementId.IntegerValue` moving to `.Value` in newer versions.
 
 ---
 
 ## Install
 
-### 1. Server — .NET tool
+### 1. Server - .NET tool
 
 ```bash
 dotnet tool install -g Bimwright.Rvt.Server
@@ -132,7 +208,7 @@ bimwright-rvt --help
 
 Requires .NET 8 SDK on the machine that runs the MCP client. If the tool is already installed, run `dotnet tool update -g Bimwright.Rvt.Server` instead.
 
-### 2. Plugin — Revit add-in
+### 2. Plugin - Revit add-in
 
 Download the plugin installer bundle from [GitHub Releases](https://github.com/bimwright/rvt-mcp/releases/latest). The bundle is named `bimwright-rvt-plugin-<tag>.zip` and contains `install.ps1`, `uninstall-all.ps1`, and the six per-Revit plugin ZIPs.
 
@@ -153,7 +229,7 @@ The script detects installed Revit versions via `HKLM:\SOFTWARE\Autodesk\Revit\`
 
 ### 3. Wire up your MCP client
 
-Add one entry per Revit year to your client's MCP config (e.g. `.mcp.json`):
+Add one entry per Revit year to your client's MCP config:
 
 ```json
 {
@@ -166,48 +242,53 @@ Add one entry per Revit year to your client's MCP config (e.g. `.mcp.json`):
 }
 ```
 
-Drop the `--target` flag and Bimwright auto-detects the running Revit instance via discovery files in `%LOCALAPPDATA%\Bimwright\`.
+Drop the `--target` flag and use one `bimwright-rvt` entry if you want auto-detect through discovery files in `%LOCALAPPDATA%\Bimwright\`.
 
-#### Scripted wire for OpenCode / Codex
-
-Instead of hand-editing `opencode.json` or `~/.codex/config.toml`, run:
+### Scripted wire for OpenCode / Codex
 
 ```powershell
-pwsh .\install.ps1 -SourceDir . -WireClient opencode      # writes entries into %USERPROFILE%\.config\opencode\opencode.json
-pwsh .\install.ps1 -SourceDir . -WireClient codex         # writes entries into %USERPROFILE%\.codex\config.toml
-pwsh .\install.ps1 -SourceDir . -WireClient opencode -WhatIf   # preview
+pwsh .\install.ps1 -SourceDir . -WireClient opencode -WhatIf
+pwsh .\install.ps1 -SourceDir . -WireClient opencode
+
+pwsh .\install.ps1 -SourceDir . -WireClient codex -WhatIf
+pwsh .\install.ps1 -SourceDir . -WireClient codex
 ```
 
-The script:
+The script preserves non-bimwright entries and backs up the original config as `<file>.bimwright.bak` before writing.
 
-- Adds one `bimwright-rvt-r<YY>` entry per Revit year detected on this machine.
-- Preserves every non-bimwright entry already in the config (merge-in-place).
-- Backs up the original as `<file>.bimwright.bak` before writing.
-- Does nothing if the host's config file is not present (host not installed).
+Claude Code users can also paste the JSON snippet into a project `.mcp.json`. See [AGENTS.md](AGENTS.md) for exact paths and schemas for Claude Code, Claude Desktop, Cursor, Cline, VS Code Copilot, OpenCode, Codex, Gemini CLI, and Antigravity.
 
-Claude Code users: paste the JSON snippet above into your project's `.mcp.json` — the scripted path does not auto-edit project-level files.
+### 4. Verify
+
+1. Open Revit 2022-2027 and a model.
+2. Use the BIMwright ribbon panel to start/toggle the MCP plugin.
+3. In the MCP client, run `tools/list`.
+4. Call `get_current_view_info`.
+
+Expected response shape:
+
+```json
+{ "viewName": "Level 1", "viewType": "FloorPlan", "levelName": "Level 1", "scale": 100 }
+```
+
+Do not claim an install is complete until the MCP client can list tools and call Revit successfully.
 
 ### Uninstall everything
 
-To remove plugin, .NET global tool, host-config entries, discovery files, and ToolBaker cache in one pass:
+To remove plugin, .NET global tool, host-config entries, discovery files, logs, and ToolBaker cache in one pass:
 
 ```powershell
-pwsh .\uninstall-all.ps1 -WhatIf    # preview what will be removed
-pwsh .\uninstall-all.ps1            # interactive confirm, then execute
-pwsh .\uninstall-all.ps1 -Yes       # skip prompt
-pwsh .\uninstall-all.ps1 -KeepLogs  # preserve *.log and *.jsonl files
+pwsh .\uninstall-all.ps1 -WhatIf
+pwsh .\uninstall-all.ps1
+pwsh .\uninstall-all.ps1 -Yes
+pwsh .\uninstall-all.ps1 -KeepLogs
 ```
 
-Notes:
-
-- This removes `Bimwright.Rvt.Server` from **every** project on the machine (`dotnet tool uninstall -g`), not just the current directory.
-- Project-level `.mcp.json` files are not scanned — remove any `bimwright-rvt-*` entries in those manually.
-- `install.ps1 -Uninstall` remains the narrow plugin-only uninstall (backward compatible).
-- `-KeepLogs` preserves the `logs\` subdirectory if present, plus any root-level `*.log` / `*.jsonl` files inside `%LOCALAPPDATA%\Bimwright\`.
+`install.ps1 -Uninstall` remains the narrow plugin-only uninstall.
 
 ---
 
-## Supported MCP clients
+## Supported MCP Clients
 
 | Client | Status | Notes |
 |--------|--------|-------|
@@ -221,162 +302,150 @@ Notes:
 | Gemini CLI | documented | `gemini mcp add ...` or settings JSON |
 | Antigravity | documented | Gemini/Antigravity MCP config JSON |
 
-See [AGENTS.md](AGENTS.md) for exact config paths, schemas, dry-run expectations, and rollback notes for all supported hosts.
-
----
-
-## Quickstart — 5 minutes to first tool call
-
-1. Install or update `Bimwright.Rvt.Server`, download the plugin bundle, then run `install.ps1` from the extracted folder.
-2. Open Revit, go to **Add-Ins → BIMwright**, then click the MCP toggle button.
-3. In your MCP client, run `tools/list` — you should see the default toolsets (`query`, `create`, `view`, `meta`, `lint`).
-4. Call `get_current_view_info` — you'll get back a DTO like:
-   ```json
-   { "viewName": "Level 1", "viewType": "FloorPlan", "levelName": "Level 1", "scale": 100 }
-   ```
-5. Try something real:
-   ```
-   batch_execute({
-     "commands": "[
-       {\"command\":\"create_grid\",\"params\":{\"name\":\"A\",\"start\":[0,0],\"end\":[20000,0]}},
-       {\"command\":\"create_level\",\"params\":{\"name\":\"L2\",\"elevation\":3000}}
-     ]"
-   })
-   ```
-   One undo step, both ops committed atomically.
-
 ---
 
 ## Toolsets
 
-**32 tools across 11 toolsets.** Five toolsets are on by default (`query`, `create`, `view`, `meta`, `lint`); the rest opt in via `--toolsets` or config. When adaptive bake is enabled, three suggestion lifecycle tools are added to the `toolbaker` surface, bringing the full adaptive surface to 35 tools.
+The non-adaptive surface contains 32 tools across 11 toolsets. When adaptive bake is enabled, the surface expands to 35 tools.
+
+Default-on toolsets: `query`, `create`, `view`, `meta`, `lint`.
+
+Optional toolsets: `modify`, `delete`, `annotation`, `export`, `mep`, `toolbaker`.
+
+Enable with `--toolsets query,create,modify,meta` or `--toolsets all`. Add `--read-only` to strip `create`, `modify`, and `delete` regardless of what was requested.
 
 | Toolset | Tools | Default |
 |---------|-------|---------|
-| `query` | get current view, selected elements, available family types, material quantities, model stats, AI element filter | **on** |
-| `create` | grid, level, room, line-based, point-based, surface-based element | **on** |
-| `view` | create view, sheet layout, place view on sheet | **on** |
-| `meta` | `show_message`, `switch_target`, `batch_execute`, usage stats | **on** |
-| `lint` | view-naming pattern analysis, correction suggestions, firm-profile detect | **on** |
+| `query` | get current view, selected elements, available family types, material quantities, model stats, AI element filter | on |
+| `create` | grid, level, room, line-based, point-based, surface-based element | on |
+| `view` | create view, sheet layout, place view on sheet | on |
+| `meta` | `show_message`, `switch_target`, `batch_execute`, usage stats | on |
+| `lint` | view-naming pattern analysis, correction suggestions, firm-profile detect | on |
 | `modify` | `operate_element`, `color_elements` | off |
 | `delete` | `delete_element` | off |
 | `annotation` | `tag_all_rooms`, `tag_all_walls` | off |
 | `export` | `export_room_data` | off |
 | `mep` | `detect_system_elements` | off |
-| `toolbaker` | accepted-tool list/run, send-code, and adaptive suggestion lifecycle tools *(env/config opt-in)* | off |
+| `toolbaker` | accepted-tool list/run, send-code, adaptive suggestion lifecycle | off |
 
-Enable with `--toolsets query,create,modify,meta` or `--toolsets all`. Add `--read-only` to strip `create`/`modify`/`delete` regardless of what you requested.
-
-### All tools
+### All Tools
 
 | Toolset | Tool | Description |
 |---|---|---|
-| `query` | `get_current_view_info` | Active view metadata (type, level, scale, detail level). |
+| `query` | `get_current_view_info` | Active view metadata: type, level, scale, detail level. |
 | `query` | `get_selected_elements` | Currently selected elements with id, name, category, type. |
 | `query` | `get_available_family_types` | Family types in the project, filterable by category. |
-| `query` | `ai_element_filter` | Filter by category + parameter + operator (values in mm). |
+| `query` | `ai_element_filter` | Filter by category and parameter/operator, values in mm. |
 | `query` | `analyze_model_statistics` | Element counts grouped by category. |
-| `query` | `get_material_quantities` | Area (m²) and volume (m³) for a category. |
+| `query` | `get_material_quantities` | Area and volume totals for a category. |
 | `create` | `create_line_based_element` | Wall or other line-based element. |
 | `create` | `create_point_based_element` | Door, window, furniture or other point element. |
 | `create` | `create_surface_based_element` | Floor or ceiling from a polyline. |
-| `create` | `create_level` | Level at elevation (mm). |
-| `create` | `create_grid` | Grid line between two points (mm). |
+| `create` | `create_level` | Level at elevation in mm. |
+| `create` | `create_grid` | Grid line between two points in mm. |
 | `create` | `create_room` | Room at a point, bound by walls. |
 | `modify` | `operate_element` | Select, hide, unhide, isolate, or set-color on IDs. |
-| `modify` | `color_elements` | Color-code a category by parameter value (auto palette). |
-| `delete` | `delete_element` | Delete by ID list (destructive; not MCP-undoable). |
+| `modify` | `color_elements` | Color-code a category by parameter value. |
+| `delete` | `delete_element` | Delete by ID list. Keep off unless explicitly needed. |
 | `view` | `create_view` | Floor plan or 3D view. |
 | `view` | `place_view_on_sheet` | Drop a view onto a new or existing sheet. |
-| `view` | `analyze_sheet_layout` | Title block + viewport positions and scales (mm). |
-| `export` | `export_room_data` | All rooms: name, number, area, perimeter, level, volume. |
-| `annotation` | `tag_all_walls` | Wall-type tags at midpoint (skips already-tagged). |
-| `annotation` | `tag_all_rooms` | Room tags at location point (skips already-tagged). |
-| `mep` | `detect_system_elements` | Traverse connectors from a seed; return system members. |
-| `toolbaker` | `send_code_to_revit` | Run ad-hoc C# body inside Revit after plugin-visible adaptive-bake opt-in. |
-| `toolbaker` | `list_baked_tools` | List registered baked tools. |
-| `toolbaker` | `run_baked_tool` | Invoke a baked tool by name. |
-| `toolbaker` | `list_bake_suggestions` | Adaptive-bake only: list local suggestions. |
-| `toolbaker` | `accept_bake_suggestion` | Adaptive-bake only: accept and apply a local suggestion. |
-| `toolbaker` | `dismiss_bake_suggestion` | Adaptive-bake only: snooze or dismiss a local suggestion. |
-| `meta` | `show_message` | TaskDialog inside Revit — connection test or user notification. |
-| `meta` | `switch_target` | Switch the active Revit connection when multiple versions are running. |
-| `meta` | `batch_execute` | Run N commands atomically in one TransactionGroup (single undo). |
-| `meta` | `analyze_usage_patterns` | Usage stats: tool call counts, sessions, errors (last N days). |
-| `lint` | `analyze_view_naming_patterns` | Infer dominant view-naming pattern + coverage + outliers. |
-| `lint` | `suggest_view_name_corrections` | Propose corrected names for view outliers (inferred or profile-based). |
-| `lint` | `detect_firm_profile` | Fingerprint project naming, match against firm-profile library. |
+| `view` | `analyze_sheet_layout` | Title block, viewport positions, and scales in mm. |
+| `export` | `export_room_data` | Rooms with name, number, area, perimeter, level, volume. |
+| `annotation` | `tag_all_walls` | Wall-type tags at midpoint; skips already tagged. |
+| `annotation` | `tag_all_rooms` | Room tags at location point; skips already tagged. |
+| `mep` | `detect_system_elements` | Traverse connectors from a seed and return system members. |
+| `toolbaker` | `send_code_to_revit` | Run ad-hoc C# inside Revit after explicit opt-in and confirmation. |
+| `toolbaker` | `list_baked_tools` | List accepted personal baked tools. |
+| `toolbaker` | `run_baked_tool` | Invoke an accepted baked tool by name. |
+| `toolbaker` | `list_bake_suggestions` | Adaptive bake only: list local suggestions. |
+| `toolbaker` | `accept_bake_suggestion` | Adaptive bake only: accept and apply a local suggestion. |
+| `toolbaker` | `dismiss_bake_suggestion` | Adaptive bake only: snooze or dismiss a local suggestion. |
+| `meta` | `show_message` | TaskDialog inside Revit for connection tests or notifications. |
+| `meta` | `switch_target` | Switch active Revit connection when multiple versions run. |
+| `meta` | `batch_execute` | Run commands atomically in one `TransactionGroup`. |
+| `meta` | `analyze_usage_patterns` | Local usage stats: tool calls, sessions, errors. |
+| `lint` | `analyze_view_naming_patterns` | Infer dominant view-naming pattern and outliers. |
+| `lint` | `suggest_view_name_corrections` | Propose corrected names for view outliers. |
+| `lint` | `detect_firm_profile` | Fingerprint project naming against firm profiles. |
 
 ---
 
-## Supported Revit versions
+## Supported Revit Versions
 
 | Revit | Target Framework | Transport | Notes |
 |-------|------------------|-----------|-------|
-| 2022  | .NET 4.8 | TCP | Accepted ToolBaker path smoke-tested |
-| 2023  | .NET 4.8 | TCP | Core runtime coverage |
-| 2024  | .NET 4.8 | TCP | Core runtime coverage |
-| 2025  | .NET 8 (`net8.0-windows7.0`) | Named Pipe | First .NET 8 shell; core runtime coverage |
-| 2026  | .NET 8 (`net8.0-windows7.0`) | Named Pipe | Core runtime coverage; accepted ToolBaker path smoke-tested |
-| 2027  | .NET 10 (`net10.0-windows7.0`) | Named Pipe | Accepted ToolBaker path smoke-tested |
+| 2022 | .NET 4.8 | TCP | Accepted ToolBaker path smoke-tested |
+| 2023 | .NET 4.8 | TCP | Core runtime coverage |
+| 2024 | .NET 4.8 | TCP | Core runtime coverage |
+| 2025 | .NET 8 (`net8.0-windows7.0`) | Named Pipe | Core runtime coverage |
+| 2026 | .NET 8 (`net8.0-windows7.0`) | Named Pipe | Core runtime coverage; accepted ToolBaker path smoke-tested |
+| 2027 | .NET 10 (`net10.0-windows7.0`) | Named Pipe | Accepted ToolBaker path smoke-tested |
 
-Compile gate is 6/6. Core runtime coverage has passed on R23–R26, and manual smoke testing has now covered the accepted ToolBaker list/run/ribbon path on R22, R26, and R27. Treat that as practical runtime evidence, not a promise that every baked tool is portable across every Revit year; Revit API drift can still affect custom C# bodies.
+Runtime behavior can still differ across Revit years because the Revit API changes. Custom baked C# tools should be treated as version-sensitive unless tested across the target years.
 
 ---
 
-## Security
+## Security And Privacy
 
-Short version: **your model stays on your machine.** The MCP server runs locally, the plugin runs inside your Revit process, they talk over localhost. That's the whole picture.
+Short version: your model stays on your machine.
 
-Longer version, for the people reviewing this for their org:
+- **Loopback by default.** TCP transport listens on `127.0.0.1`; Named Pipe is local-machine scoped.
+- **Per-session token handshake.** Discovery files under `%LOCALAPPDATA%\Bimwright\` carry connection information and auth token.
+- **Schema validation.** Malformed tool calls are rejected before command handlers run.
+- **Path masking.** Errors returned to the model are sanitized to avoid leaking absolute paths.
+- **ToolBaker opt-in.** Adaptive bake and send-code paths require explicit enablement; `send_code_to_revit` still requires Revit-side confirmation.
+- **Local storage.** Usage events, bake database, logs, and accepted-tool metadata stay under local Bimwright storage.
 
-- **Loopback bind by default.** TCP transport listens on `127.0.0.1` only. If you actually need LAN access, you have to set `BIMWRIGHT_ALLOW_LAN_BIND=1` — I'd rather you knew you were turning it on.
-- **Per-session token handshake.** Every connection has to present a token written only to `%LOCALAPPDATA%\Bimwright\portR<nn>.txt`. Same-user attacker still wins (they can read the file). Anyone without read access to your user profile is out.
-- **Schema validation before handlers run.** Malformed tool calls get an error-as-teacher envelope (`error`, `suggestion`, `hint`) instead of crashing something.
-- **Path masking on exceptions.** If a handler throws, the MCP response and logs get sanitized — no absolute paths, no UNC shares, no user-home dirs.
-
-Full threat model in [the security appendix](docs/roadmap.md#security).
+See [SECURITY.md](SECURITY.md) for disclosure and threat-model details.
 
 ---
 
 ## Configuration
 
-Three layers, later wins: **JSON file → env vars → CLI args**.
+Three layers, later wins: JSON file, then env vars, then CLI args.
 
 | Setting | CLI | Env | JSON key |
 |---------|-----|-----|----------|
 | Target Revit year | `--target R23` | `BIMWRIGHT_TARGET` | `target` |
 | Toolsets | `--toolsets query,create` | `BIMWRIGHT_TOOLSETS` | `toolsets` |
 | Read-only | `--read-only` | `BIMWRIGHT_READ_ONLY=1` | `readOnly` |
-| Allow LAN bind | — | `BIMWRIGHT_ALLOW_LAN_BIND=1` | `allowLanBind` |
+| Allow LAN bind | plugin-side only | `BIMWRIGHT_ALLOW_LAN_BIND=1` | `allowLanBind` |
 | Allow ToolBaker when selected | `--enable-toolbaker` / `--disable-toolbaker` | `BIMWRIGHT_ENABLE_TOOLBAKER` | `enableToolbaker` |
-| Enable adaptive bake suggestions | — | `BIMWRIGHT_ENABLE_ADAPTIVE_BAKE=1` | `enableAdaptiveBake` |
-| Cache send-code bodies for clustering | — | `BIMWRIGHT_CACHE_SEND_CODE_BODIES=1` | `cacheSendCodeBodies` |
+| Enable adaptive bake suggestions | `--enable-adaptive-bake` / `--disable-adaptive-bake` | `BIMWRIGHT_ENABLE_ADAPTIVE_BAKE=1` | `enableAdaptiveBake` |
+| Cache send-code bodies | `--cache-send-code-bodies` / `--no-cache-send-code-bodies` | `BIMWRIGHT_CACHE_SEND_CODE_BODIES=1` | `cacheSendCodeBodies` |
 
 JSON file path: `%LOCALAPPDATA%\Bimwright\bimwright.config.json`.
 
 ---
 
-## Self-shaping toolkit
+## Development
 
-Adaptive bake is the opt-in path for turning repeated local Revit workflows into personal tools. It is default OFF. Enable it only when you want Bimwright to record local usage patterns and propose bake suggestions.
+```bash
+dotnet test tests/Bimwright.Rvt.Tests/Bimwright.Rvt.Tests.csproj
+dotnet build src/server/Bimwright.Rvt.Server.csproj -c Release
+dotnet build src/plugin-r26/Bimwright.Rvt.Plugin.R26.csproj -c Release
+```
 
-Usage data stays on the machine under `%LOCALAPPDATA%\Bimwright\`. The server is the sole SQLite writer; the Revit plugin reads `bake.db` and owns only the runtime command cache and ribbon buttons. No usage collection endpoint is involved.
+Plugin projects auto-deploy after normal `Build`, copying into `%APPDATA%\Autodesk\Revit\Addins\<year>\Bimwright\`. Close Revit before building plugin projects because Revit locks loaded DLLs.
 
-Accepted baked tools are available through the Revit ribbon and the `toolbaker` indirection tools: call `list_baked_tools` to inspect your accepted tools, then `run_baked_tool` with `name=<tool_name>` to execute one. In v0.3.x, baked tools do not appear as separate native MCP tools. The accepted-tool path has been smoke-tested across R22, R26, and R27, including cross-version compatibility metadata updates.
+To stage plugin ZIPs for release:
 
-`bake_tool` was removed in v0.3.0. New bakes come from measured suggestions and explicit user acceptance through `accept_bake_suggestion`; legacy accepted tools remain callable through `list_baked_tools` / `run_baked_tool`.
+```powershell
+pwsh scripts/stage-plugin-zip.ps1 -Config Release
+```
 
-See [docs/bake.md](docs/bake.md) for enabling, privacy, suggestion handling, archive behavior, and cross-Revit compatibility notes.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for test strategy, tool-surface snapshot rules, and contribution notes.
 
 ---
 
 ## Documentation
 
-- [ARCHITECTURE.md](ARCHITECTURE.md) — process model, transport, multi-version strategy, ToolBaker pipeline.
-- [CONTRIBUTING.md](CONTRIBUTING.md) — dev setup, build matrix, coding style.
-- [docs/bake.md](docs/bake.md) — adaptive bake opt-in, privacy, suggestions, accepted tools, and compat behavior.
-- [docs/roadmap.md](docs/roadmap.md) — v0.2 (MCP Resources, ToolBaker hardening), v0.3 (ToolBaker redesign, async job polling, aggregator listings), v1.0 (governance).
+- [AGENTS.md](AGENTS.md) - install and wiring guide for AI coding agents.
+- [ARCHITECTURE.md](ARCHITECTURE.md) - process model, transport, threading, and DTO strategy.
+- [docs/bake.md](docs/bake.md) - adaptive bake, privacy, accepted tools, and compatibility behavior.
+- [docs/roadmap.md](docs/roadmap.md) - current hardening plan and deferred work.
+- [docs/testing/fresh-install-checklist.md](docs/testing/fresh-install-checklist.md) - public install verification checklist.
+- [benchmarks/README.md](benchmarks/README.md) - weak-model benchmark procedure.
 
 ---
 
@@ -384,11 +453,10 @@ See [docs/bake.md](docs/bake.md) for enabling, privacy, suggestion handling, arc
 
 Apache-2.0. See [LICENSE](LICENSE).
 
-If you use it for something real, give the repo a star — helps others find it.
+Revit and Autodesk are registered trademarks of Autodesk, Inc. bimwright is an independent open-source project and is not affiliated with, sponsored by, or endorsed by Autodesk, Inc.
 
 ---
 
 <p align="center">
-  A <a href="https://github.com/bimwright">bimwright</a> project —
-  <a href="https://github.com/bimwright"><img src="https://raw.githubusercontent.com/bimwright/.github/master/assets/logos/bimwright-logo.png" alt="bimwright" height="24" align="middle" /></a>
+  A <a href="https://github.com/bimwright">bimwright</a> project - built for practitioners who would rather automate the work than sell the mystique.
 </p>
